@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ca">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inspecciona</title>
+    <style>
+      body {
+        margin: 0;
+        min-width: 300px;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        color: #1f2a21;
+        background: linear-gradient(160deg, #f5f0df, #dbeddd);
+      }
+
+      main {
+        padding: 14px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      p {
+        margin: 8px 0;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .hint {
+        padding: 8px;
+        border: 1px solid #b8cba8;
+        border-radius: 8px;
+        background: #fffef8;
+      }
+
+      .actions {
+        margin-top: 10px;
+        display: flex;
+        gap: 8px;
+      }
+
+      button {
+        border: 1px solid #25553c;
+        border-radius: 8px;
+        background: #e6f5e8;
+        color: #173e2c;
+        padding: 7px 10px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Inspecciona</h1>
+      <p class="hint">
+        Fes focus sobre un camp de text i apareixerà el botó d'Inspecciona dins la pàgina.
+      </p>
+      <div class="actions">
+        <button id="openOptions" type="button">Opcions</button>
+      </div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

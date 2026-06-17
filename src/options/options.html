@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ca">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Opcions - Inspecciona</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Opcions d'Inspecciona</h1>
+
+      <section>
+        <h2>Variant preferida</h2>
+        <label><input type="radio" name="variant" value="general" /> centrals</label>
+        <label><input type="radio" name="variant" value="valencia" /> valencianes</label>
+        <label><input type="radio" name="variant" value="balear" /> balears</label>
+      </section>
+
+      <section>
+        <h2>Comportament</h2>
+        <label>
+          <input type="checkbox" id="autoOpenHelper" />
+          Mostrar el botó automàticament en camps editables
+        </label>
+      </section>
+
+      <div class="actions">
+        <button id="save" type="button">Desa</button>
+        <span id="status"></span>
+      </div>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Inspecciona icon">
+  <defs>
+    <linearGradient id="coat" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f3d05e" />
+      <stop offset="100%" stop-color="#d8b13e" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="20" fill="#f6f2e1" />
+  <path d="M40 80 L68 46 L94 66 L66 100 Z" fill="url(#coat)" stroke="#6f5c20" stroke-width="3" />
+  <circle cx="37" cy="52" r="14" fill="none" stroke="#263049" stroke-width="6" />
+  <line x1="47" y1="62" x2="62" y2="77" stroke="#263049" stroke-width="6" stroke-linecap="round" />
+  <circle cx="82" cy="40" r="16" fill="#f1c88e" stroke="#6a4c2a" stroke-width="3" />
+  <path d="M68 24 Q80 10 104 20 Q98 34 82 32" fill="url(#coat)" stroke="#6f5c20" stroke-width="3" />
+  <path d="M76 95 Q85 106 97 98" stroke="#111" stroke-width="5" fill="none" stroke-linecap="round" />
+  <path d="M30 103 Q36 112 42 103" stroke="#111" stroke-width="5" fill="none" stroke-linecap="round" />
+</svg>
