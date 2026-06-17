@@ -12,7 +12,9 @@ manifest.json              # Manifest MV3 (conté la versió única de veritat)
 assets/icon.svg            # Icona provisional
 src/
   background.js            # Service worker (ES module). Gestiona les crides HTTP.
+  content/helpers.js       # Helpers del content script.
   content/content.js       # Content script. Crea i gestiona el UI injectat.
+  content/content.css      # Estils del panell injectat.
   popup/popup.html|js      # Popup del toolbar icon.
   options/options.html|js  # Pàgina d'opcions persistent.
 scripts/
@@ -24,12 +26,12 @@ scripts/
 
 ## Convencions de codi
 
-### Estils: zero fitxers .css
+### Estils: traçables i mantenibles
 
-- **content.js**: tots els estils estan a l'objecte `ST` al principi de l'IIFE.
-  S'apliquen via `element.style.cssText = ST.nomClau`.
-  En el `innerHTML` del panell s'usen com `style="${ST.nomClau}"`.
-  **Mai crear un fitxer content.css.**
+- **content/content.css**: estils del panell injectat, curts i agrupats per seccions.
+  Evitar fitxers CSS gegants i regles sense ús.
+- **content/content.js**: només lògica i wiring d'events.
+- **content/helpers.js**: utilitats reutilitzables (escapeHtml, sendMessage, text helpers...).
 
 - **popup.html / options.html**: Bootstrap 5 CDN via `<link>`.
   Tota l'aparença ve de classes Bootstrap directament als elements HTML.

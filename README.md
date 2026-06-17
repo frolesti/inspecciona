@@ -33,16 +33,43 @@ Notes:
 
 - `manifest.json`: definició de l'extensió MV3
 - `src/background.js`: crides a API Softcatalà
-- `src/content/content.js`: assistent injectat als camps de text
-- `src/content/content.css`: estils de l'assistent
+- `src/content/helpers.js`: helpers compartits del content script
+- `src/content/content.js`: lògica UI injectada als camps de text
+- `src/content/content.css`: estils de l'assistent (curt i traçable)
 - `src/options/*`: pàgina d'opcions
 - `src/popup/*`: popup simple de l'extensió
+- `scripts/pack.ps1`: genera zip de distribució
+- `scripts/release.ps1`: bump de versió + commit + tag + push
 
 ## Instal·lació local
 
 1. Obre Chrome i ves a `chrome://extensions`.
 2. Activa `Mode de desenvolupador`.
 3. `Carrega descomprimida` i selecciona aquesta carpeta.
+
+## Build de l'extensió (zip) per proves a la botiga
+
+1. Genera el paquet:
+  - `./scripts/pack.ps1`
+2. El zip quedarà a:
+  - `dist/inspecciona-X.Y.Z.zip`
+3. A Chrome Web Store Developer Dashboard:
+  - entra a l'extensió
+  - ves a una versió de prova (draft/test)
+  - puja el fitxer zip de `dist/`
+
+Notes importants per al zip:
+- El `manifest.json` ha d'estar a l'arrel del zip.
+- No incloure carpetes temporals ni fitxers de desenvolupament.
+- El script `pack.ps1` ja empaqueta només el necessari.
+
+## Publicar una nova versió
+
+- Patch: `./scripts/release.ps1`
+- Minor: `./scripts/release.ps1 minor`
+- Major: `./scripts/release.ps1 major`
+
+Aquest script actualitza `manifest.json`, crea commit, tag i fa push.
 
 ## Ús
 

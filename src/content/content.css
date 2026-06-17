@@ -1,0 +1,153 @@
+.insp-open-btn,
+.insp-panel,
+.insp-panel * {
+  font-family: "Segoe UI", sans-serif;
+  box-sizing: border-box;
+}
+
+.insp-open-btn {
+  position: absolute;
+  z-index: 2147483600;
+  display: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: linear-gradient(120deg, #173e2c, #2d7e59);
+  color: #f4fff8;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+.insp-panel {
+  position: fixed;
+  right: 18px;
+  top: 18px;
+  width: min(440px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  z-index: 2147483601;
+  display: none;
+  background: #f8f6ef;
+  color: #152019;
+  border: 1px solid #c7b988;
+  border-radius: 12px;
+  box-shadow: 0 18px 45px rgba(10, 20, 13, 0.36);
+  font-size: 14px;
+}
+
+.insp-panel.is-open {
+  display: block;
+}
+
+.insp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #dbcda2;
+  background: linear-gradient(180deg, #efe8d5, #e2d7b3);
+}
+
+.insp-close {
+  border: 0;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+.insp-body {
+  padding: 10px 12px;
+}
+
+.insp-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.insp-text,
+.insp-inline input {
+  width: 100%;
+  border: 1px solid #b6ac8d;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fffdf7;
+  color: #152019;
+  font-size: 13px;
+}
+
+.insp-text {
+  resize: vertical;
+}
+
+.insp-actions,
+.insp-inline {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.insp-actions button,
+.insp-inline button {
+  border: 1px solid #355f46;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #e7f2ea;
+  color: #173e2c;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.insp-block {
+  margin-top: 14px;
+}
+
+.insp-block h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.insp-status,
+.insp-msg,
+.insp-ctx {
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.insp-ctx {
+  color: #5d5a4c;
+}
+
+.insp-corrections,
+.insp-autocomplete,
+.insp-synonyms {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.insp-item {
+  margin-bottom: 8px;
+}
+
+.insp-repls {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.insp-token {
+  border: 1px solid #a89d79;
+  background: #fff;
+  color: #3a3420;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
