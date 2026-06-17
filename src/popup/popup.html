@@ -3,17 +3,515 @@
   <head>
     <meta charset="utf-8" />
     <title>Inspecciona</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" />
-    <style>body{min-width:240px}</style>
+    <style>
+      :root {
+        --insp-ink: #1e3a2b;
+        --insp-ink-soft: #4a5a4f;
+        --insp-cream: #faf6e9;
+        --insp-cream-edge: #ecdec1;
+        --insp-green: #1f5f3e;
+        --insp-green-dark: #163e2a;
+        --insp-gold: #d6a92e;
+        --insp-typo: #c0392b;
+        --insp-grammar: #2c5d8a;
+        --insp-style: #1f5f3e;
+        --insp-serif: Georgia, "Times New Roman", serif;
+        --insp-radius: 14px;
+      }
+
+      /* Truc per arrodonir el popup de Chrome: html transparent, body
+         arrodonit. Modern Chromium respecta el border-radius del body. */
+      html,
+      body {
+        width: 340px;
+        height: 580px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: var(--insp-cream);
+      }
+      body {
+        color: var(--insp-ink);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .insp-root {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        background: var(--insp-cream);
+        overflow: hidden;
+      }
+
+      .insp-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-bottom: 12px;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(31, 95, 62, 0.18) transparent;
+      }
+
+      .insp-scroll::-webkit-scrollbar { width: 6px; }
+      .insp-scroll::-webkit-scrollbar-track { background: transparent; }
+      .insp-scroll::-webkit-scrollbar-thumb {
+        background: rgba(31, 95, 62, 0.12);
+        border-radius: 999px;
+      }
+      .insp-scroll:hover::-webkit-scrollbar-thumb {
+        background: rgba(31, 95, 62, 0.22);
+      }
+      .insp-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(31, 95, 62, 0.34);
+      }
+
+      /* ── Estat desactivat ────────────────────────────────────── */
+      body.is-disabled .insp-hero,
+      body.is-disabled .insp-legend,
+      body.is-disabled .insp-section:not(.insp-section--always),
+      body.is-disabled .insp-mecenes,
+      body.is-disabled .insp-footer {
+        filter: grayscale(1);
+        opacity: 0.55;
+      }
+      body.is-disabled .insp-hero { filter: grayscale(1) brightness(0.85); }
+
+      /* ── Capçalera ─────────────────────────────────────────── */
+      .insp-hero {
+        background: var(--insp-green);
+        color: #fff;
+        padding: 14px 16px;
+        border-bottom: 2px solid var(--insp-gold);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .insp-hero img { width: 48px; height: 48px; object-fit: contain; }
+      .insp-hero h1 {
+        font-family: var(--insp-serif);
+        font-size: 18px;
+        font-weight: 700;
+        margin: 0;
+        letter-spacing: 0.03em;
+      }
+      .insp-hero p {
+        font-size: 11px;
+        margin: 2px 0 0;
+        opacity: 0.9;
+        font-style: italic;
+      }
+
+      /* ── Seccions ─────────────────────────────────────────── */
+      .insp-section { padding: 10px 16px; }
+      .insp-section.pt-0 { padding-top: 0; }
+
+      /* ── Toggle activació ───────────────────────────────────── */
+      .insp-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        background: rgba(31, 95, 62, 0.06);
+        border-bottom: 1px solid var(--insp-cream-edge);
+      }
+      .insp-toggle-text {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .insp-toggle-text strong {
+        font-size: 12.5px;
+        color: var(--insp-ink);
+        font-weight: 600;
+      }
+      .insp-toggle-text small {
+        font-size: 11px;
+        color: var(--insp-ink-soft);
+      }
+      body.is-disabled .insp-toggle-text small { color: var(--insp-typo); }
+
+      .insp-switch {
+        position: relative;
+        display: inline-block;
+        width: 42px;
+        height: 22px;
+        flex-shrink: 0;
+      }
+      .insp-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .insp-switch-track {
+        position: absolute;
+        inset: 0;
+        background: #c4ccc6;
+        border-radius: 999px;
+        transition: background 160ms ease;
+        cursor: pointer;
+      }
+      .insp-switch-track::before {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 18px;
+        height: 18px;
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        transition: transform 160ms ease;
+      }
+      .insp-switch input:checked + .insp-switch-track { background: var(--insp-green); }
+      .insp-switch input:checked + .insp-switch-track::before { transform: translateX(20px); }
+      .insp-switch input:focus-visible + .insp-switch-track {
+        box-shadow: 0 0 0 3px rgba(214, 169, 46, 0.45);
+      }
+
+      /* ── Llegenda (sense fons) ─────────────────────────────── */
+      .insp-legend {
+        padding: 12px 16px 4px;
+        font-size: 12px;
+        line-height: 1.55;
+        color: var(--insp-ink);
+      }
+      .insp-legend p { margin: 0 0 4px; }
+      .insp-legend ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .insp-legend li { padding: 1px 0; font-weight: 500; }
+      .insp-legend li.typo    { color: var(--insp-typo); }
+      .insp-legend li.grammar { color: var(--insp-grammar); }
+      .insp-legend li.style   { color: var(--insp-style); }
+      .insp-legend em {
+        display: block;
+        margin-top: 8px;
+        font-style: italic;
+        color: var(--insp-ink-soft);
+        font-size: 11px;
+      }
+
+      /* ── Detalls col·lapsables ─────────────────────────────── */
+      details.insp-details {
+        background: #fff;
+        border: 1px solid var(--insp-cream-edge);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      details.insp-details + details.insp-details { margin-top: 8px; }
+      details.insp-details > summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 10px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--insp-green);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        letter-spacing: 0.02em;
+      }
+      details.insp-details > summary::after {
+        content: "▾";
+        font-size: 10px;
+        color: var(--insp-ink-soft);
+        transition: transform 120ms ease;
+      }
+      details.insp-details[open] > summary::after { transform: rotate(180deg); }
+      details.insp-details > summary::-webkit-details-marker { display: none; }
+      details.insp-details .insp-details-body { padding: 4px 12px 12px; }
+
+      /* ── Form & inputs ────────────────────────────────────── */
+      .insp-check { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: 12.5px; }
+      .insp-check input[type="checkbox"], .insp-check input[type="radio"] {
+        width: 14px; height: 14px; accent-color: var(--insp-green);
+      }
+
+      /* Fila etiqueta + opcions */
+      .insp-row {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 0;
+        border-bottom: 1px dashed var(--insp-cream-edge);
+      }
+      .insp-row:last-child { border-bottom: none; }
+      .insp-row > .insp-row-label {
+        font-size: 12px;
+        color: var(--insp-ink-soft);
+        font-weight: 500;
+      }
+      .insp-row .insp-row-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .insp-pill {
+        position: relative;
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--insp-cream-edge);
+        background: #fff;
+        color: var(--insp-ink-soft);
+        cursor: pointer;
+        margin: 0;
+      }
+      .insp-pill input { position: absolute; opacity: 0; pointer-events: none; }
+      .insp-pill.is-active {
+        background: var(--insp-green);
+        color: #fff;
+        border-color: var(--insp-green);
+      }
+
+      /* ── Botó Desa ────────────────────────────────────────── */
+      .insp-btn-primary {
+        background: var(--insp-green);
+        color: #fff;
+        border: none;
+        font-weight: 500;
+        font-size: 12px;
+        padding: 6px 18px;
+        border-radius: 8px;
+        transition: background 120ms ease;
+        cursor: pointer;
+      }
+      .insp-btn-primary:hover { background: var(--insp-green-dark); color: #fff; }
+      .insp-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+      /* ── Mecenes ──────────────────────────────────────────── */
+      .insp-mecenes {
+        background: #fff;
+        border: 1px solid var(--insp-cream-edge);
+        border-radius: 10px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .insp-mecenes p {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--insp-ink);
+      }
+      .insp-aixeta {
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        width: 100%;
+        max-width: 100%;
+        background: var(--insp-gold);
+        color: var(--insp-ink);
+        border: none;
+        font-weight: 600;
+        font-size: 13px;
+        padding: 9px 12px;
+        border-radius: 8px;
+        text-decoration: none;
+        transition: filter 120ms ease, transform 120ms ease;
+        line-height: 1;
+        white-space: nowrap;
+      }
+      .insp-aixeta:hover { filter: brightness(0.95); transform: translateY(-1px); color: var(--insp-ink); }
+      .insp-aixeta img {
+        height: 16px;
+        width: auto;
+        object-fit: contain;
+        display: inline-block;
+        flex-shrink: 0;
+        position: relative;
+        top: 1px;
+      }
+
+      /* ── Peu ──────────────────────────────────────────────── */
+      .insp-footer {
+        padding: 8px 16px 12px;
+        text-align: center;
+        font-size: 11px;
+        color: #6a7470;
+      }
+      .insp-footer a { color: var(--insp-green); text-decoration: none; font-weight: 600; }
+      .insp-footer a:hover { text-decoration: underline; }
+    </style>
   </head>
-  <body class="bg-light p-3">
-    <h6 class="fw-bold text-success mb-2">Inspecciona</h6>
-    <p class="small text-secondary bg-white border border-success-subtle rounded p-2 mb-3">
-      Fes focus sobre un camp de text i apareixerà el botó d'Inspecciona dins la pàgina.
-    </p>
-    <button id="openOptions" type="button" class="btn btn-outline-success btn-sm">
-      Opcions
-    </button>
+  <body>
+    <div class="insp-root">
+
+      <header class="insp-hero">
+        <img src="../../assets/icon-128.png" alt="Inspecciona" />
+        <div>
+          <h1>INSPECCIONA</h1>
+          <p>Que no t'enxampi l'inspector fent faltes!</p>
+        </div>
+      </header>
+
+      <!-- Toggle d'activació (sempre visible, no s'enfosqueix) -->
+      <div class="insp-toggle insp-section--always">
+        <div class="insp-toggle-text">
+          <strong id="toggleTitle">Inspector actiu</strong>
+          <small id="toggleStatus">Vigilant els camps editables.</small>
+        </div>
+        <label class="insp-switch">
+          <input type="checkbox" id="autoOpenHelper" />
+          <span class="insp-switch-track" aria-hidden="true"></span>
+        </label>
+      </div>
+
+      <div class="insp-scroll">
+
+        <!-- Llegenda -->
+        <div class="insp-legend">
+          <p>L'inspector destacarà al teu text:</p>
+          <ul>
+            <li class="typo">- Errors ortogràfics</li>
+            <li class="grammar">- Qüestions gramaticals o tipogràfiques</li>
+            <li class="style">- Recomanacions d'estil</li>
+          </ul>
+          <em>Els resultats són orientatius i en cap cas substitueixen una revisió experta.</em>
+        </div>
+
+        <!-- Formes verbals -->
+        <section class="insp-section">
+          <details class="insp-details">
+            <summary>Formes verbals</summary>
+            <div class="insp-details-body">
+              <label class="insp-check"><input type="radio" name="variant" value="general" /> Centrals</label>
+              <label class="insp-check"><input type="radio" name="variant" value="valencia" /> Valencianes</label>
+              <label class="insp-check"><input type="radio" name="variant" value="balear" /> Balears</label>
+            </div>
+          </details>
+        </section>
+
+        <!-- Opcions del corrector -->
+        <section class="insp-section pt-0">
+          <details class="insp-details">
+            <summary>Opcions del corrector</summary>
+            <div class="insp-details-body">
+              <div class="insp-row">
+                <span class="insp-row-label">Diacrítics</span>
+                <div class="insp-row-options" data-group="diacritics">
+                  <label class="insp-pill"><input type="radio" name="diacritics" value="traditional"><span>Tradicionals</span></label>
+                  <label class="insp-pill"><input type="radio" name="diacritics" value="iec"><span>IEC 2017</span></label>
+                </div>
+              </div>
+              <div class="insp-row">
+                <span class="insp-row-label">Pronom «se»</span>
+                <div class="insp-row-options" data-group="pronomSe">
+                  <label class="insp-pill"><input type="radio" name="pronomSe" value="simple"><span>se centra</span></label>
+                  <label class="insp-pill"><input type="radio" name="pronomSe" value="double"><span>se/es centra</span></label>
+                </div>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <!-- Tipografia -->
+        <section class="insp-section pt-0">
+          <details class="insp-details" id="typoDetails">
+            <summary>Tipografia</summary>
+            <div class="insp-details-body">
+
+          <div class="insp-row">
+            <span class="insp-row-label">Exigeix</span>
+            <div class="insp-row-options">
+              <label class="insp-check"><input type="checkbox" id="cometesTypo" /> Cometes</label>
+              <label class="insp-check"><input type="checkbox" id="puntsSuspe" /> Punts suspensius (…)</label>
+            </div>
+          </div>
+
+          <div class="insp-row">
+            <span class="insp-row-label">Apòstrof</span>
+            <div class="insp-row-options" data-group="apostrof">
+              <label class="insp-pill"><input type="radio" name="apostrof" value="typo"><span>tipogràfic (')</span></label>
+              <label class="insp-pill"><input type="radio" name="apostrof" value="recte"><span>recte (')</span></label>
+              <label class="insp-pill"><input type="radio" name="apostrof" value=""><span>indefinit</span></label>
+            </div>
+          </div>
+
+          <div class="insp-row">
+            <span class="insp-row-label">Guió</span>
+            <div class="insp-row-options" data-group="guio">
+              <label class="insp-pill"><input type="radio" name="guio" value="llarg"><span>llarg (—)</span></label>
+              <label class="insp-pill"><input type="radio" name="guio" value="mitja"><span>mitjà (–)</span></label>
+              <label class="insp-pill"><input type="radio" name="guio" value=""><span>indefinit</span></label>
+            </div>
+          </div>
+
+          <div class="insp-row">
+            <span class="insp-row-label">Guió per a</span>
+            <div class="insp-row-options" data-group="guioPer">
+              <label class="insp-pill"><input type="radio" name="guioPer" value="dialegs"><span>diàlegs</span></label>
+              <label class="insp-pill"><input type="radio" name="guioPer" value="enumeracions"><span>enumeracions</span></label>
+              <label class="insp-pill"><input type="radio" name="guioPer" value=""><span>indefinit</span></label>
+            </div>
+          </div>
+
+          <div class="insp-row">
+            <span class="insp-row-label">Interrogant (¿)</span>
+            <div class="insp-row-options" data-group="interrogant">
+              <label class="insp-pill"><input type="radio" name="interrogant" value="mai"><span>mai</span></label>
+              <label class="insp-pill"><input type="radio" name="interrogant" value="sempre"><span>sempre</span></label>
+              <label class="insp-pill"><input type="radio" name="interrogant" value=""><span>indefinit</span></label>
+            </div>
+          </div>
+
+          <div class="insp-row">
+            <span class="insp-row-label">Exclamació (¡)</span>
+            <div class="insp-row-options" data-group="exclamacio">
+              <label class="insp-pill"><input type="radio" name="exclamacio" value="mai"><span>mai</span></label>
+              <label class="insp-pill"><input type="radio" name="exclamacio" value="sempre"><span>sempre</span></label>
+              <label class="insp-pill"><input type="radio" name="exclamacio" value=""><span>indefinit</span></label>
+            </div>
+          </div>
+
+          <div class="insp-row">
+            <span class="insp-row-label">Percentatge</span>
+            <div class="insp-row-options" data-group="percent">
+              <label class="insp-pill"><input type="radio" name="percent" value="sense"><span>10%</span></label>
+              <label class="insp-pill"><input type="radio" name="percent" value="amb"><span>10&nbsp;%</span></label>
+              <label class="insp-pill"><input type="radio" name="percent" value=""><span>indefinit</span></label>
+            </div>
+          </div>
+
+          <div class="insp-row">
+            <span class="insp-row-label">Hores</span>
+            <div class="insp-row-options" data-group="hora">
+              <label class="insp-pill"><input type="radio" name="hora" value="punt"><span>11.35</span></label>
+              <label class="insp-pill"><input type="radio" name="hora" value="dospunts"><span>11:35</span></label>
+              <label class="insp-pill"><input type="radio" name="hora" value=""><span>indefinit</span></label>
+            </div>
+          </div>
+
+            </div>
+          </details>
+        </section>
+
+        <!-- Mecenes -->
+        <section class="insp-section pt-0">
+          <div class="insp-mecenes">
+            <p>
+              L'Inspecciona és una eina gratuïta i sense publicitat. Si l'has provada i l'has trobat útil, pots ajudar-me a mantenir-la i a millorar-la fent-te mecenes. Gràcies!
+            </p>
+            <a id="aixeta" class="insp-aixeta" href="https://frolesti.aixeta.cat/" target="_blank" rel="noopener noreferrer">
+              <span>Dona'm suport a </span><img src="../../assets/aixeta-logo.png" alt="Aixeta" />
+            </a>
+          </div>
+        </section>
+
+        <footer class="insp-footer">
+          Fet per <a id="author" href="https://frolesti.cat" target="_blank" rel="noopener noreferrer">frolesti</a>
+        </footer>
+      </div>
+    </div>
+
     <script src="popup.js"></script>
   </body>
 </html>

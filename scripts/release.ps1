@@ -10,6 +10,13 @@ param(
 $root         = Split-Path $PSScriptRoot -Parent
 $manifestPath = Join-Path $root "manifest.json"
 
+Set-Location $root
+$dirty = git status --short
+if ($dirty) {
+    Write-Error "L'arbre de treball no esta net. Desa o commiteja els canvis abans de fer release."
+    exit 1
+}
+
 # Llegir versió actual
 $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
 $parts    = $manifest.version -split '\.'
@@ -38,7 +45,6 @@ $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestPath -Encoding UTF8
 Write-Host "Versio: $($parts -join '.') -> $newVersion" -ForegroundColor Cyan
 
 # Git
-Set-Location $root
 git add manifest.json
 git commit -m "chore: bump version to $newVersion"
 git tag "v$newVersion"

@@ -15,8 +15,7 @@ src/
   content/helpers.js       # Helpers del content script.
   content/content.js       # Content script. Crea i gestiona el UI injectat.
   content/content.css      # Estils del panell injectat.
-  popup/popup.html|js      # Popup del toolbar icon.
-  options/options.html|js  # Pàgina d'opcions persistent.
+  popup/popup.html|js      # Popup únic: opcions + identitat + mecenatge.
 scripts/
   pack.ps1                 # Genera dist/inspecciona-X.Y.Z.zip
   release.ps1              # Bump de versió + commit + tag + push

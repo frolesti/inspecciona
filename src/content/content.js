@@ -2,275 +2,683 @@
   const H = window.InspeccionaHelpers;
   if (!H) return;
 
+  /* ── Icones SVG (inline, una sola línia per facilitat de manteniment) ── */
+  const ICONS = {
+    correct: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    synonyms: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M7 7h10v10"/></svg>',
+    variant: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+    close: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>'
+  };
+
+  /* ── Estat ─────────────────────────────────────────────────────────── */
+  const PREF_DEFAULTS = {
+    variant: "general",
+    autoOpenHelper: true,
+    diacritics: "iec",
+    pronomSe: "simple",
+    cometesTypo: false,
+    puntsSuspe: false,
+    apostrof: "",
+    guio: "",
+    guioPer: "",
+    interrogant: "",
+    exclamacio: "mai",
+    percent: "sense",
+    hora: ""
+  };
+
   const state = {
-    target: null,
+    selection: null,
+    workingText: "",
+    lastMatches: [],
+    dismissed: new Set(),
+    prefs: { ...PREF_DEFAULTS },
+    enabled: true,
     root: null,
-    button: null,
+    toolbar: null,
+    toolbarButtons: {},
     panel: null,
-    textArea: null,
-    status: null,
-    corrections: null,
-    synonyms: null,
-    autocomplete: null,
-    variant: "general"
+    panelTitle: null,
+    panelPreview: null,
+    panelStatus: null,
+    panelActions: null,
+    panelResults: null,
+    panelDragged: false,
+    drag: null
   };
 
   init();
 
   function init() {
-    chrome.storage.sync.get({ variant: "general", autoOpenHelper: true }, (cfg) => {
-      state.variant = cfg.variant || "general";
-      if (cfg.autoOpenHelper) {
-        attachEvents();
-        ensureUi();
-      }
+    if (!H.isExtensionAlive()) return;
+
+    chrome.storage.sync.get(PREF_DEFAULTS, (cfg) => {
+      if (chrome.runtime.lastError) return;
+      state.prefs = { ...PREF_DEFAULTS, ...cfg };
+      state.enabled = state.prefs.autoOpenHelper !== false;
+      if (!state.enabled) return;
+      ensureUi();
+      attachEvents();
     });
+
+    try {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (!H.isExtensionAlive()) return;
+        if (area !== "sync") return;
+        for (const [key, change] of Object.entries(changes)) {
+          if (key in PREF_DEFAULTS) state.prefs[key] = change.newValue;
+        }
+        if ("autoOpenHelper" in changes) state.enabled = state.prefs.autoOpenHelper !== false;
+      });
+    } catch {
+      // Si el context està invalidat ignorem; refrescar la pestanya el restablirà.
+    }
   }
 
   function attachEvents() {
-    document.addEventListener("focusin", onFocusIn, true);
-    window.addEventListener("scroll", placeButton, true);
-    window.addEventListener("resize", placeButton);
+    document.addEventListener("mouseup", onMouseUp, true);
+    document.addEventListener("mousedown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
   }
 
-  function onFocusIn(event) {
-    const editable = H.isEditableTarget(event.target);
-    if (!editable) {
-      hideButton();
-      return;
+  function onMouseUp(event) {
+    if (isInsideUi(event.target)) return;
+
+    window.setTimeout(() => {
+      const next = readEditableSelection(event.target);
+      if (!next) {
+        if (!isPanelOpen()) hideToolbar();
+        return;
+      }
+      state.selection = next;
+      if (!isPanelOpen()) {
+        showToolbar(next.rect, H.isSingleWord(next.text));
+      }
+    }, 0);
+  }
+
+  function onPointerDown(event) {
+    if (isInsideUi(event.target)) return;
+    hideToolbar();
+    closePanel();
+  }
+
+  function onKeyDown(event) {
+    if (event.key === "Escape") {
+      hideToolbar();
+      closePanel();
     }
-    state.target = editable;
-    showButton();
-    placeButton();
   }
 
+  function onScroll(event) {
+    // No tanquem si l'scroll passa dins de la nostra UI (per ex. llista de sinònims).
+    if (event.target && isInsideUi(event.target)) return;
+    // Si l'usuari fa scroll a la pàgina, amaguem el toolbar però mantenim el panell.
+    hideToolbar();
+  }
+
+  function onResize() {
+    hideToolbar();
+    closePanel();
+  }
+
+  /* ── Construcció UI ─────────────────────────────────────────────────── */
   function ensureUi() {
     if (state.root) return;
 
     const root = document.createElement("div");
     root.className = "insp-root";
 
-    const button = document.createElement("button");
-    button.className = "insp-open-btn";
-    button.textContent = "Inspecciona";
-    button.type = "button";
-    button.addEventListener("click", openPanel);
+    const toolbar = document.createElement("div");
+    toolbar.className = "insp-toolbar";
+    toolbar.setAttribute("role", "toolbar");
+    toolbar.setAttribute("aria-label", "Inspecciona");
+
+    const btnCorrect  = createIconButton("correct",  ICONS.correct,  "Corregeix");
+    const btnSynonyms = createIconButton("synonyms", ICONS.synonyms, "Sinònims");
+    const btnVariant  = createIconButton("variant",  ICONS.variant,  "Varietat dialectal");
+
+    toolbar.append(btnCorrect, btnSynonyms, btnVariant);
 
     const panel = document.createElement("section");
     panel.className = "insp-panel";
-    panel.innerHTML = `
-      <header class="insp-header">
-        <strong>Inspecciona</strong>
-        <button type="button" class="insp-close" data-insp="close" title="Tanca">×</button>
-      </header>
-      <div class="insp-body">
-        <label class="insp-label">Text a revisar</label>
-        <textarea data-insp="text" class="insp-text" rows="6" placeholder="Escriu o enganxa text en català..."></textarea>
-        <div class="insp-actions">
-          <button type="button" data-insp="check">Corregir</button>
-          <button type="button" data-insp="apply">Enganxar al camp</button>
-        </div>
-        <div class="insp-block">
-          <h4>Resultats de correcció</h4>
-          <p data-insp="status" class="insp-status"></p>
-          <ul data-insp="corrections" class="insp-corrections"></ul>
-        </div>
-        <div class="insp-block">
-          <h4>Sinònims</h4>
-          <div class="insp-inline">
-            <input data-insp="word" type="text" placeholder="Paraula" />
-            <button type="button" data-insp="synonyms">Cerca</button>
-          </div>
-          <div class="insp-inline">
-            <input data-insp="prefix" type="text" placeholder="Suggeriments ràpids" />
-            <button type="button" data-insp="autocomplete">Suggerir</button>
-          </div>
-          <ul data-insp="autocomplete-list" class="insp-autocomplete"></ul>
-          <ul data-insp="synonyms-list" class="insp-synonyms"></ul>
-        </div>
-      </div>
-    `;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Inspecciona");
 
-    root.appendChild(button);
-    root.appendChild(panel);
+    const header = document.createElement("header");
+    header.className = "insp-panel-header";
+
+    const title = document.createElement("strong");
+    title.className = "insp-panel-title";
+    title.textContent = "Inspecciona";
+
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "insp-panel-close";
+    close.setAttribute("aria-label", "Tanca");
+    close.innerHTML = ICONS.close;
+    close.addEventListener("click", () => {
+      closePanel();
+      hideToolbar();
+    });
+
+    header.append(title, close);
+
+    const body = document.createElement("div");
+    body.className = "insp-panel-body";
+
+    const preview = document.createElement("div");
+    preview.className = "insp-preview";
+
+    const status = document.createElement("p");
+    status.className = "insp-status";
+
+    const actions = document.createElement("div");
+    actions.className = "insp-actions";
+
+    const results = document.createElement("div");
+    results.className = "insp-results";
+
+    body.append(preview, status, actions, results);
+    panel.append(header, body);
+
+    root.append(toolbar, panel);
     document.documentElement.appendChild(root);
 
-    state.root        = root;
-    state.button      = button;
-    state.panel       = panel;
-    state.textArea    = panel.querySelector('[data-insp="text"]');
-    state.status      = panel.querySelector('[data-insp="status"]');
-    state.corrections = panel.querySelector('[data-insp="corrections"]');
-    state.synonyms    = panel.querySelector('[data-insp="synonyms-list"]');
-    state.autocomplete = panel.querySelector('[data-insp="autocomplete-list"]');
+    state.root = root;
+    state.toolbar = toolbar;
+    state.toolbarButtons = { correct: btnCorrect, synonyms: btnSynonyms, variant: btnVariant };
+    state.panel = panel;
+    state.panelTitle = title;
+    state.panelPreview = preview;
+    state.panelStatus = status;
+    state.panelActions = actions;
+    state.panelResults = results;
 
-    panel.querySelector('[data-insp="close"]').addEventListener("click", closePanel);
-    panel.querySelector('[data-insp="check"]').addEventListener("click", runCheck);
-    panel.querySelector('[data-insp="apply"]').addEventListener("click", applyToField);
-    panel.querySelector('[data-insp="synonyms"]').addEventListener("click", runSynonyms);
-    panel.querySelector('[data-insp="autocomplete"]').addEventListener("click", runAutocomplete);
+    btnCorrect.addEventListener("click", openCorrectionPanel);
+    btnSynonyms.addEventListener("click", openSynonymsPanel);
+    btnVariant.addEventListener("click", openVariantPanel);
+
+    header.addEventListener("mousedown", onPanelDragStart);
   }
 
-  function openPanel() {
+  function createIconButton(action, svg, label) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "insp-toolbar-btn";
+    button.dataset.insp = action;
+    button.dataset.tooltip = label;
+    button.setAttribute("aria-label", label);
+    button.innerHTML = svg;
+    return button;
+  }
+
+  /* ── Toolbar ─────────────────────────────────────────────────────────── */
+  function showToolbar(rect, allowSynonyms) {
+    if (!state.toolbar || !rect) return;
+
+    state.toolbarButtons.synonyms.hidden = !allowSynonyms;
+    state.toolbar.classList.add("is-open");
+
+    requestAnimationFrame(() => {
+      const width = state.toolbar.offsetWidth || 140;
+      const height = state.toolbar.offsetHeight || 40;
+
+      let left = window.scrollX + rect.left + (rect.width / 2) - (width / 2);
+      let top = window.scrollY + rect.top - height - 10;
+
+      if (top < window.scrollY + 8) top = window.scrollY + rect.bottom + 10;
+
+      const minLeft = window.scrollX + 8;
+      const maxLeft = window.scrollX + document.documentElement.clientWidth - width - 8;
+      left = Math.max(minLeft, Math.min(left, maxLeft));
+
+      state.toolbar.style.left = `${left}px`;
+      state.toolbar.style.top  = `${top}px`;
+    });
+  }
+
+  function hideToolbar() {
+    state.toolbar?.classList.remove("is-open");
+  }
+
+  /* ── Panell ─────────────────────────────────────────────────────────── */
+  function openPanel(title, rect) {
     if (!state.panel) return;
-    state.textArea.value = state.target ? H.extractText(state.target) : "";
-    state.status.textContent = "";
-    state.corrections.innerHTML = "";
-    state.synonyms.innerHTML = "";
-    state.autocomplete.innerHTML = "";
+    resetPanel();
+    state.panelTitle.textContent = title;
     state.panel.classList.add("is-open");
+    hideToolbar();
+    placePanel(rect);
   }
 
   function closePanel() {
-    state.panel.classList.remove("is-open");
+    state.panel?.classList.remove("is-open");
+  }
+
+  function isPanelOpen() {
+    return Boolean(state.panel && state.panel.classList.contains("is-open"));
+  }
+
+  function resetPanel() {
+    state.panelStatus.textContent = "";
+    state.panelPreview.textContent = "";
+    state.panelActions.replaceChildren();
+    state.panelResults.replaceChildren();
+    state.lastMatches = [];
+    state.dismissed = new Set();
+    state.panelDragged = false;
+  }
+
+  function placePanel(rect) {
+    if (!state.panel || !rect) return;
+    if (state.panelDragged) return;
+
+    requestAnimationFrame(() => {
+      const width  = state.panel.offsetWidth  || 380;
+      const height = state.panel.offsetHeight || 240;
+
+      let left = window.scrollX + rect.left + (rect.width / 2) - (width / 2);
+      let top  = window.scrollY + rect.bottom + 12;
+
+      const viewportBottom = window.scrollY + document.documentElement.clientHeight - 8;
+      if (top + height > viewportBottom) {
+        top = window.scrollY + rect.top - height - 12;
+      }
+
+      const minLeft = window.scrollX + 8;
+      const maxLeft = window.scrollX + document.documentElement.clientWidth - width - 8;
+      left = Math.max(minLeft, Math.min(left, maxLeft));
+      top  = Math.max(window.scrollY + 8, top);
+
+      state.panel.style.left = `${left}px`;
+      state.panel.style.top  = `${top}px`;
+    });
+  }
+
+  function setStatus(message, kind) {
+    state.panelStatus.textContent = message || "";
+    state.panelStatus.dataset.kind = kind || "";
+  }
+
+  /* ── Corrector ──────────────────────────────────────────────────────── */
+  function openCorrectionPanel() {
+    if (!state.selection?.target) return;
+    state.workingText = H.extractText(state.selection.target);
+    openPanel("Correcció", state.selection.rect);
+    state.panelPreview.textContent = state.workingText;
+    setStatus("Revisant…", "loading");
+    runCheck();
   }
 
   async function runCheck() {
-    const text = state.textArea.value.trim();
-    if (!text) { setStatus("No hi ha text per revisar."); return; }
-
-    setStatus("Revisant...");
-    state.corrections.innerHTML = "";
+    const text = (state.workingText || "").trim();
+    if (!text) {
+      setStatus("No hi ha text per revisar.", "warn");
+      return;
+    }
 
     const response = await H.sendMessage({
       type: "inspecciona:check",
-      text,
-      variant: state.variant
+      text: state.workingText,
+      variant: state.prefs.variant,
+      prefs: state.prefs
     });
 
     if (!response.ok) {
-      setStatus(response.error || "No s'ha pogut completar la correcció.");
+      setStatus(response.error || "No s'ha pogut completar la correcció.", "error");
       return;
     }
-    renderCorrections(response.data, text);
+
+    renderCorrections(response.data);
   }
 
-  function renderCorrections(data, originalText) {
-    const matches = data?.matches || [];
-    if (!matches.length) { setStatus("No s'han detectat errors."); return; }
+  function renderCorrections(data) {
+    const allMatches = (data?.matches || []).filter(
+      (match) => Number.isInteger(match.offset) && Number.isInteger(match.length) && match.length > 0
+    );
+    state.lastMatches = allMatches;
 
-    setStatus(`${matches.length} incidència(es) detectada(es).`);
-    for (const match of matches.slice(0, 40)) {
-      const li = document.createElement("li");
-      li.className = "insp-item";
+    renderPreviewWithMarks(state.workingText, allMatches);
+    state.panelResults.replaceChildren();
+    state.panelActions.replaceChildren();
 
-      const title = document.createElement("p");
-      title.className = "insp-msg";
-      title.textContent = match.message || "Possibilitat de millora";
+    const visible = allMatches.filter((match) => !state.dismissed.has(matchKey(match)));
 
-      const ctx = document.createElement("p");
-      ctx.className = "insp-ctx";
-      ctx.textContent = match.context?.text || originalText.slice(match.offset, match.offset + match.length);
+    if (allMatches.length === 0) {
+      setStatus("Cap error detectat.", "ok");
+      return;
+    }
 
-      li.appendChild(title);
-      li.appendChild(ctx);
+    if (visible.length === 0) {
+      setStatus("Has descartat totes les incidències.", "ok");
+      return;
+    }
 
-      const replacements = match.replacements || [];
-      if (replacements.length > 0) {
-        const wrap = document.createElement("div");
-        wrap.className = "insp-repls";
-        for (const rep of replacements.slice(0, 5)) {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "insp-token";
-          btn.textContent = rep.value;
-          btn.addEventListener("click", () => applySingleReplacement(match.offset, match.length, rep.value));
-          wrap.appendChild(btn);
-        }
-        li.appendChild(wrap);
-      }
-      state.corrections.appendChild(li);
+    setStatus(`${visible.length} ${visible.length === 1 ? "incidència" : "incidències"}.`, "info");
+
+    for (const match of visible.slice(0, 50)) {
+      state.panelResults.appendChild(buildMatchRow(match));
     }
   }
 
-  async function runSynonyms() {
-    const wordEl = state.panel.querySelector('[data-insp="word"]');
-    const word = wordEl.value.trim();
-    if (!word) { state.synonyms.innerHTML = "<li>Introdueix una paraula.</li>"; return; }
+  function matchKey(match) {
+    const slice = state.workingText.slice(match.offset, match.offset + match.length);
+    return `${slice}::${match.message || ""}`;
+  }
 
-    state.synonyms.innerHTML = "<li>Buscant...</li>";
-    const response = await H.sendMessage({ type: "inspecciona:synonyms", word });
+  function categorizeMatch(match) {
+    const catId  = (match?.rule?.category?.id  || "").toUpperCase();
+    const issue  = (match?.rule?.issueType     || "").toLowerCase();
+    const ruleId = (match?.rule?.id            || "").toUpperCase();
+
+    if (catId === "TYPOS" || ruleId.startsWith("MORFOLOGIK") || issue === "misspelling") {
+      return "typo";
+    }
+    if (catId === "STYLE" || catId === "REDUNDANCY" || catId === "COLLOCATIONS" || issue === "style") {
+      return "style";
+    }
+    return "grammar";
+  }
+
+  function renderPreviewWithMarks(text, matches) {
+    state.panelPreview.replaceChildren();
+
+    const sorted = [...matches].sort((a, b) => a.offset - b.offset);
+    let cursor = 0;
+
+    for (const match of sorted) {
+      const start = Math.max(cursor, match.offset);
+      const end   = Math.min(text.length, match.offset + match.length);
+      if (end <= start) continue;
+
+      if (start > cursor) {
+        state.panelPreview.appendChild(document.createTextNode(text.slice(cursor, start)));
+      }
+
+      const marker = document.createElement("mark");
+      marker.className = "insp-mark";
+      marker.dataset.kind = categorizeMatch(match);
+      marker.textContent = text.slice(start, end);
+      state.panelPreview.appendChild(marker);
+
+      cursor = end;
+    }
+
+    if (cursor < text.length) {
+      state.panelPreview.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+
+    if (state.panelPreview.childNodes.length === 0) {
+      state.panelPreview.textContent = text;
+    }
+  }
+
+  function buildMatchRow(match) {
+    const row = document.createElement("div");
+    row.className = "insp-match";
+    row.dataset.kind = categorizeMatch(match);
+
+    const dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.className = "insp-match-dismiss";
+    dismiss.setAttribute("aria-label", "Descarta aquesta incidència");
+    dismiss.dataset.tooltip = "Descarta";
+    dismiss.innerHTML = ICONS.close;
+    dismiss.addEventListener("click", () => {
+      state.dismissed.add(matchKey(match));
+      renderCorrections({ matches: state.lastMatches });
+    });
+
+    const message = document.createElement("p");
+    message.className = "insp-match-message";
+    message.textContent = match.message || "Possibilitat de millora";
+
+    const fragment = document.createElement("p");
+    fragment.className = "insp-match-fragment";
+    fragment.textContent = `«${state.workingText.slice(match.offset, match.offset + match.length)}»`;
+
+    row.append(dismiss, message, fragment);
+
+    const replacements = (match.replacements || []).slice(0, 5);
+    if (replacements.length > 0) {
+      const list = document.createElement("div");
+      list.className = "insp-chips";
+      for (const rep of replacements) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "insp-chip";
+        chip.textContent = rep.value;
+        chip.addEventListener("click", () => applySingleReplacement(match.offset, match.length, rep.value));
+        list.appendChild(chip);
+      }
+      row.appendChild(list);
+    }
+
+    return row;
+  }
+
+  function applySingleReplacement(offset, length, replacement) {
+    if (!state.selection?.target) return;
+    state.workingText = H.replaceTextSlice(state.workingText, offset, length, replacement);
+    H.setText(state.selection.target, state.workingText);
+    runCheck();
+  }
+
+  /* ── Sinònims ───────────────────────────────────────────────────────── */
+  async function openSynonymsPanel() {
+    if (!state.selection?.text || !H.isSingleWord(state.selection.text)) return;
+
+    openPanel(`Sinònims de «${state.selection.text}»`, state.selection.rect);
+    setStatus("Cercant…", "loading");
+
+    const response = await H.sendMessage({
+      type: "inspecciona:synonyms",
+      word: state.selection.text
+    });
 
     if (!response.ok) {
-      state.synonyms.innerHTML = `<li>${H.escapeHtml(response.error || "Error cercant sinònims")}</li>`;
+      setStatus(response.error || "No s'ha pogut cercar.", "error");
       return;
     }
+
     renderSynonyms(response.data);
   }
 
   function renderSynonyms(data) {
-    const entries = data?.results || [];
-    if (!entries.length) { state.synonyms.innerHTML = "<li>No s'han trobat resultats.</li>"; return; }
+    const words = H.uniqueSynonymWords(data?.results || []);
 
-    const words = H.uniqueSynonymWords(entries);
-
-    if (!words.length) { state.synonyms.innerHTML = "<li>No s'han trobat sinònims.</li>"; return; }
-
-    state.synonyms.innerHTML = words
-      .slice(0, 60)
-      .map((w) => `<li><button class="insp-token" type="button">${H.escapeHtml(w)}</button></li>`)
-      .join("");
-
-    state.synonyms.querySelectorAll("button").forEach((b) =>
-      b.addEventListener("click", () => insertWord(b.textContent))
-    );
-  }
-
-  async function runAutocomplete() {
-    const prefixEl = state.panel.querySelector('[data-insp="prefix"]');
-    const prefix = prefixEl.value.trim();
-    if (!prefix) { state.autocomplete.innerHTML = "<li>Introdueix un prefix.</li>"; return; }
-
-    state.autocomplete.innerHTML = "<li>Buscant...</li>";
-    const response = await H.sendMessage({ type: "inspecciona:autocomplete", prefix });
-
-    if (!response.ok) {
-      state.autocomplete.innerHTML = `<li>${H.escapeHtml(response.error || "Error en suggeriments")}</li>`;
+    if (!words.length) {
+      setStatus("No s'han trobat sinònims per a aquesta paraula.", "info");
       return;
     }
 
-    const words = response.data?.words || [];
-    if (!words.length) { state.autocomplete.innerHTML = "<li>Sense suggeriments.</li>"; return; }
+    setStatus(`${words.length} ${words.length === 1 ? "sinònim" : "sinònims"}.`, "info");
 
-    state.autocomplete.innerHTML = words
-      .slice(0, 12)
-      .map((w) => `<li><button class="insp-token" type="button">${H.escapeHtml(w)}</button></li>`)
-      .join("");
+    const list = document.createElement("div");
+    list.className = "insp-synonyms";
 
-    state.autocomplete.querySelectorAll("button").forEach((b) =>
-      b.addEventListener("click", () => {
-        state.panel.querySelector('[data-insp="word"]').value = b.textContent;
-      })
-    );
+    for (const word of words) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "insp-chip";
+      chip.textContent = word;
+      chip.addEventListener("click", () => replaceSelectionWithWord(word));
+      list.appendChild(chip);
+    }
+
+    state.panelResults.replaceChildren(list);
   }
 
-  function insertWord(word) {
-    const v = state.textArea.value;
-    state.textArea.value = v ? `${v} ${word}` : word;
+  function replaceSelectionWithWord(word) {
+    if (!state.selection?.target) return;
+
+    const fullText = H.extractText(state.selection.target);
+    const fragment = state.selection.text;
+    const start = fullText.indexOf(fragment);
+
+    if (start < 0) {
+      H.setText(state.selection.target, word);
+    } else {
+      const next = fullText.slice(0, start) + word + fullText.slice(start + fragment.length);
+      H.setText(state.selection.target, next);
+    }
+
+    closePanel();
+    hideToolbar();
   }
 
-  function applySingleReplacement(offset, length, replacement) {
-    const t = state.textArea.value;
-    state.textArea.value = t.slice(0, offset) + replacement + t.slice(offset + length);
+  /* ── Varietat dialectal ─────────────────────────────────────────────── */
+  function openVariantPanel() {
+    if (!state.selection) return;
+
+    openPanel("Varietat dialectal", state.selection.rect);
+    setStatus("Tria la varietat per a les properes correccions.", "info");
+
+    const options = [
+      { value: "general",  label: "Catalan general (centrals)" },
+      { value: "valencia", label: "Valencianes" },
+      { value: "balear",   label: "Balears" }
+    ];
+
+    const wrap = document.createElement("div");
+    wrap.className = "insp-options";
+
+    for (const option of options) {
+      const id = `insp-variant-${option.value}`;
+      const row = document.createElement("label");
+      row.className = "insp-option";
+      row.htmlFor = id;
+
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "insp-variant";
+      input.id = id;
+      input.value = option.value;
+      input.checked = state.prefs.variant === option.value;
+
+      const text = document.createElement("span");
+      text.textContent = option.label;
+
+      row.append(input, text);
+      wrap.appendChild(row);
+    }
+
+    state.panelResults.replaceChildren(wrap);
+
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "insp-btn insp-btn-primary";
+    save.textContent = "Desa varietat";
+    save.addEventListener("click", () => {
+      const value = wrap.querySelector('input[name="insp-variant"]:checked')?.value;
+      if (!value) {
+        setStatus("Tria una varietat.", "warn");
+        return;
+      }
+      chrome.storage.sync.set({ variant: value }, () => {
+        state.prefs.variant = value;
+        setStatus("Varietat desada.", "ok");
+        window.setTimeout(closePanel, 600);
+      });
+    });
+
+    state.panelActions.replaceChildren(save);
   }
 
-  function applyToField() {
-    if (!state.target) { setStatus("No hi ha cap camp de text actiu."); return; }
-    H.setText(state.target, state.textArea.value);
-    setStatus("Text actualitzat al camp.");
+  /* ── Helpers locals ─────────────────────────────────────────────────── */
+  function isInsideUi(target) {
+    return Boolean(state.root && target && state.root.contains(target));
   }
 
-  function setStatus(message) { state.status.textContent = message; }
+  function readEditableSelection(eventTarget) {
+    const editable = H.isEditableTarget(eventTarget) || H.isEditableTarget(document.activeElement);
+    if (!editable) return null;
 
-  function showButton() { state.button.style.display = "block"; }
+    if (editable instanceof HTMLInputElement || editable instanceof HTMLTextAreaElement) {
+      const start = editable.selectionStart ?? 0;
+      const end   = editable.selectionEnd ?? 0;
+      if (end <= start) return null;
 
-  function hideButton() { if (state.button) state.button.style.display = "none"; }
+      const text = editable.value.slice(start, end);
+      if (!text.trim()) return null;
 
-  function placeButton() {
-    if (!state.target || !state.button || state.button.style.display === "none") return;
-    const rect = state.target.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) { hideButton(); return; }
-    state.button.style.top  = `${window.scrollY + rect.top + 6}px`;
-    state.button.style.left = `${window.scrollX + rect.right - 106}px`;
+      return {
+        kind: "text-control",
+        text: text.trim(),
+        rect: editable.getBoundingClientRect(),
+        target: editable
+      };
+    }
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+
+    const text = selection.toString().trim();
+    if (!text) return null;
+
+    const anchorEditable = H.isEditableTarget(selection.anchorNode);
+    if (anchorEditable !== editable) return null;
+
+    const range = selection.getRangeAt(0);
+    let rect = range.getBoundingClientRect();
+    if ((!rect || rect.width === 0) && range.getClientRects().length > 0) {
+      rect = range.getClientRects()[0];
+    }
+    if (!rect) return null;
+
+    return {
+      kind: "contenteditable",
+      text,
+      rect,
+      target: editable
+    };
+  }
+
+  /* ── Drag del panell ────────────────────────────────────────────────── */
+  function onPanelDragStart(event) {
+    if (event.button !== 0) return;
+    // No iniciem drag si l'usuari ha clicat el botó de tancar.
+    if (event.target.closest(".insp-panel-close")) return;
+
+    const rect = state.panel.getBoundingClientRect();
+    state.drag = {
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      startLeft: rect.left + window.scrollX,
+      startTop: rect.top + window.scrollY
+    };
+
+    state.panel.classList.add("is-dragging");
+    document.addEventListener("mousemove", onPanelDragMove, true);
+    document.addEventListener("mouseup", onPanelDragEnd, true);
+    event.preventDefault();
+  }
+
+  function onPanelDragMove(event) {
+    if (!state.drag) return;
+    const dx = event.clientX - state.drag.pointerX;
+    const dy = event.clientY - state.drag.pointerY;
+
+    const width = state.panel.offsetWidth;
+    const height = state.panel.offsetHeight;
+    const maxLeft = window.scrollX + document.documentElement.clientWidth - width - 4;
+    const maxTop  = window.scrollY + document.documentElement.clientHeight - height - 4;
+
+    const left = Math.max(window.scrollX + 4, Math.min(state.drag.startLeft + dx, maxLeft));
+    const top  = Math.max(window.scrollY + 4, Math.min(state.drag.startTop  + dy, maxTop));
+
+    state.panel.style.left = `${left}px`;
+    state.panel.style.top  = `${top}px`;
+    state.panelDragged = true;
+  }
+
+  function onPanelDragEnd() {
+    state.drag = null;
+    state.panel.classList.remove("is-dragging");
+    document.removeEventListener("mousemove", onPanelDragMove, true);
+    document.removeEventListener("mouseup", onPanelDragEnd, true);
   }
 })();

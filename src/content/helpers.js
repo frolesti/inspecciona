@@ -9,9 +9,10 @@
       return ["text", "search", "email", "url"].includes(type) ? target : null;
     }
 
-    if (target.isContentEditable) return target;
+    const element = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;
+    if (!element || !element.closest) return null;
 
-    return target.closest?.("[contenteditable='true']") || null;
+    return element.closest("[contenteditable='true'], [contenteditable='plaintext-only']") || null;
   }
 
   function extractText(target) {
@@ -22,33 +23,55 @@
   }
 
   function setText(target, text) {
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-      target.value = text;
-    } else {
-      target.innerText = text;
+    try {
+      target.focus();
+
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        target.value = text;
+      } else {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(target);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.execCommand("insertText", false, text);
+      }
+
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      target.dispatchEvent(new Event("change", { bubbles: true }));
+    } catch (error) {
+      // L'editor pot rebutjar la inserció (alguns editors rics interfereixen).
+      // Fallem silenciosament per no trencar la pàgina.
+      console.warn("[Inspecciona] No s'ha pogut escriure al camp:", error?.message || error);
     }
-    target.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function isExtensionAlive() {
+    try {
+      return Boolean(chrome?.runtime?.id);
+    } catch {
+      return false;
+    }
   }
 
   function sendMessage(payload) {
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage(payload, (response) => {
-        if (chrome.runtime.lastError) {
-          resolve({ ok: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-        resolve(response || { ok: false, error: "Sense resposta del servei." });
-      });
+      if (!isExtensionAlive()) {
+        resolve({ ok: false, error: "L'extensió s'ha actualitzat. Refresca la pàgina per continuar." });
+        return;
+      }
+      try {
+        chrome.runtime.sendMessage(payload, (response) => {
+          if (chrome.runtime.lastError) {
+            resolve({ ok: false, error: chrome.runtime.lastError.message });
+            return;
+          }
+          resolve(response || { ok: false, error: "Sense resposta del servei." });
+        });
+      } catch (error) {
+        resolve({ ok: false, error: error?.message || "Error de comunicació." });
+      }
     });
-  }
-
-  function escapeHtml(value) {
-    return String(value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\"/g, "&quot;")
-      .replace(/'/g, "&#39;");
   }
 
   function uniqueSynonymWords(results) {
@@ -65,12 +88,22 @@
     return words;
   }
 
+  function isSingleWord(text) {
+    return /^\p{L}[\p{L}'’\-]*$/u.test(String(text || "").trim());
+  }
+
+  function replaceTextSlice(text, offset, length, replacement) {
+    return text.slice(0, offset) + replacement + text.slice(offset + length);
+  }
+
   window.InspeccionaHelpers = {
     isEditableTarget,
     extractText,
     setText,
     sendMessage,
-    escapeHtml,
-    uniqueSynonymWords
+    isExtensionAlive,
+    uniqueSynonymWords,
+    isSingleWord,
+    replaceTextSlice
   };
 })();
