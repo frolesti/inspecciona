@@ -144,42 +144,42 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 /* ── Icona del toolbar: color quan està actiu, gris real quan està desactivat ── */
 const ICON_SIZES = [16, 32, 48, 128];
-let cachedGrayIcons = null;
+let cachedColorIcons = null;
+let cachedGrayIcons  = null;
 
 async function refreshActionIcon(enabled) {
   try {
-    if (enabled) {
-      await chrome.action.setIcon({
-        path: {
-          16: "assets/icon-16.png",
-          32: "assets/icon-32.png",
-          48: "assets/icon-48.png",
-          128: "assets/icon-128.png"
-        }
-      });
-      chrome.action.setTitle({ title: "Inspecciona — actiu" });
-    } else {
-      const imageData = await getGrayIcons();
-      await chrome.action.setIcon({ imageData });
-      chrome.action.setTitle({ title: "Inspecciona — desactivat" });
-    }
+    const imageData = enabled ? await getColorIcons() : await getGrayIcons();
+    await chrome.action.setIcon({ imageData });
+    chrome.action.setTitle({
+      title: enabled ? "Inspecciona — actiu" : "Inspecciona — desactivat"
+    });
   } catch (error) {
     console.warn("[Inspecciona] No s'ha pogut canviar la icona:", error?.message || error);
   }
 }
 
-async function getGrayIcons() {
-  if (cachedGrayIcons) return cachedGrayIcons;
-
+async function getColorIcons() {
+  if (cachedColorIcons) return cachedColorIcons;
   const result = {};
   for (const size of ICON_SIZES) {
-    result[size] = await loadAndGrayscale(`assets/icon-${size}.png`, size);
+    result[size] = await loadIcon(`assets/icon-${size}.png`, size, false);
+  }
+  cachedColorIcons = result;
+  return result;
+}
+
+async function getGrayIcons() {
+  if (cachedGrayIcons) return cachedGrayIcons;
+  const result = {};
+  for (const size of ICON_SIZES) {
+    result[size] = await loadIcon(`assets/icon-${size}.png`, size, true);
   }
   cachedGrayIcons = result;
   return result;
 }
 
-async function loadAndGrayscale(path, size) {
+async function loadIcon(path, size, grayscale) {
   const url = chrome.runtime.getURL(path);
   const response = await fetch(url);
   const blob = await response.blob();
@@ -190,6 +190,8 @@ async function loadAndGrayscale(path, size) {
   ctx.drawImage(bitmap, 0, 0, size, size);
 
   const data = ctx.getImageData(0, 0, size, size);
+  if (!grayscale) return data;
+
   const pixels = data.data;
   for (let i = 0; i < pixels.length; i += 4) {
     // Lluminositat percebuda (Rec. 709) + atenua una mica per donar

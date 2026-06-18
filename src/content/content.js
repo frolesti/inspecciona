@@ -56,8 +56,6 @@
       if (chrome.runtime.lastError) return;
       state.prefs = { ...PREF_DEFAULTS, ...cfg };
       state.enabled = state.prefs.autoOpenHelper !== false;
-      if (!state.enabled) return;
-      ensureUi();
       attachEvents();
     });
 
@@ -68,7 +66,13 @@
         for (const [key, change] of Object.entries(changes)) {
           if (key in PREF_DEFAULTS) state.prefs[key] = change.newValue;
         }
-        if ("autoOpenHelper" in changes) state.enabled = state.prefs.autoOpenHelper !== false;
+        if ("autoOpenHelper" in changes) {
+          state.enabled = state.prefs.autoOpenHelper !== false;
+          if (!state.enabled) {
+            hideToolbar();
+            closePanel();
+          }
+        }
       });
     } catch {
       // Si el context està invalidat ignorem; refrescar la pestanya el restablirà.
@@ -84,6 +88,7 @@
   }
 
   function onMouseUp(event) {
+    if (!state.enabled) return;
     if (isInsideUi(event.target)) return;
 
     window.setTimeout(() => {
@@ -100,12 +105,14 @@
   }
 
   function onPointerDown(event) {
+    if (!state.enabled) return;
     if (isInsideUi(event.target)) return;
     hideToolbar();
     closePanel();
   }
 
   function onKeyDown(event) {
+    if (!state.enabled) return;
     if (event.key === "Escape") {
       hideToolbar();
       closePanel();
@@ -113,6 +120,7 @@
   }
 
   function onScroll(event) {
+    if (!state.enabled) return;
     // No tanquem si l'scroll passa dins de la nostra UI (per ex. llista de sinònims).
     if (event.target && isInsideUi(event.target)) return;
     // Si l'usuari fa scroll a la pàgina, amaguem el toolbar però mantenim el panell.
@@ -217,6 +225,7 @@
 
   /* ── Toolbar ─────────────────────────────────────────────────────────── */
   function showToolbar(rect, allowSynonyms) {
+    ensureUi();
     if (!state.toolbar || !rect) return;
 
     state.toolbarButtons.synonyms.hidden = !allowSynonyms;
