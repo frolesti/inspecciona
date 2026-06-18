@@ -1,7 +1,7 @@
 ﻿{
     "manifest_version":  3,
     "name":  "Inspecciona",
-    "version":  "1.0.0",
+    "version":  "1.0.1",
     "description":  "Assistent en català: correcció, sinònims i suggeriments amb serveis de Softcatalà.",
     "permissions":  [
                         "storage",
