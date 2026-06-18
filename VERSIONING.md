@@ -31,8 +31,22 @@ Carrega l'extensió sense generar cap zip:
 .\scripts\pack.ps1
 ```
 
-Genera `dist/inspecciona-X.Y.Z.zip`.  
-A Chrome, en lloc de "Carrega descomprimida" pots arrossegar el `.zip` directament.
+Genera paquets multi-browser a `dist/`:
+- `inspecciona-X.Y.Z-chrome.zip`
+- `inspecciona-X.Y.Z-edge.zip`
+- `inspecciona-X.Y.Z-brave.zip`
+- `inspecciona-X.Y.Z-opera.zip`
+- `inspecciona-X.Y.Z-ecosia.zip`
+- `inspecciona-X.Y.Z-firefox.zip`
+- `inspecciona-X.Y.Z-safari.zip`
+
+També manté `inspecciona-X.Y.Z.zip` com a àlies de compatibilitat per Chrome.
+
+Per generar només un navegador:
+
+```powershell
+.\scripts\pack.ps1 -Browser firefox
+```
 
 ### 3. Publicar una nova versió
 

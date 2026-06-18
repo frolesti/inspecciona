@@ -17,7 +17,7 @@ src/
   content/content.css      # Estils del panell injectat.
   popup/popup.html|js      # Popup únic: opcions + identitat + mecenatge.
 scripts/
-  pack.ps1                 # Genera dist/inspecciona-X.Y.Z.zip
+  pack.ps1                 # Genera zips multi-browser a dist/
   release.ps1              # Bump de versió + commit + tag + push
 ```
 
@@ -79,7 +79,7 @@ Corrector – body `application/x-www-form-urlencoded`:
 ## Scripts de build
 
 ```powershell
-.\scripts\pack.ps1                    # zip per a testing
+.\scripts\pack.ps1                    # zips per a chrome/edge/brave/opera/ecosia/firefox/safari
 .\scripts\release.ps1 [major|minor|patch]  # publica nova versió
 ```
 

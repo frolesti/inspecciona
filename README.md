@@ -51,9 +51,18 @@ Notes:
 
 1. Genera el paquet:
   - `./scripts/pack.ps1`
-2. El zip quedarà a:
-  - `dist/inspecciona-X.Y.Z.zip`
-3. A Chrome Web Store Developer Dashboard:
+2. Els zips quedaran a `dist/`:
+  - `inspecciona-X.Y.Z-chrome.zip`
+  - `inspecciona-X.Y.Z-edge.zip`
+  - `inspecciona-X.Y.Z-brave.zip`
+  - `inspecciona-X.Y.Z-opera.zip`
+  - `inspecciona-X.Y.Z-ecosia.zip`
+  - `inspecciona-X.Y.Z-firefox.zip`
+  - `inspecciona-X.Y.Z-safari.zip`
+  - `inspecciona-X.Y.Z.zip` (àlies de compatibilitat per a Chrome)
+3. Per construir només un navegador concret:
+  - `./scripts/pack.ps1 -Browser firefox`
+4. A Chrome Web Store Developer Dashboard:
   - entra a l'extensió
   - ves a una versió de prova (draft/test)
   - puja el fitxer zip de `dist/`

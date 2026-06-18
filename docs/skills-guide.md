@@ -81,4 +81,4 @@ No cal invocar-les manualment; Copilot les carrega quan les necessita.
 
 3. **Publicar**: `.\scripts\release.ps1` — no cal recordar cap comanda git.
 
-4. **Provar localment**: `.\scripts\pack.ps1` → carrega el zip a Chrome.
+4. **Provar localment**: `.\scripts\pack.ps1` → genera zips multi-browser a `dist/`.

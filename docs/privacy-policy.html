@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ca">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Política de privadesa - Inspecciona</title>
+    <style>
+      :root {
+        --bg: #faf6e9;
+        --surface: #fffdf7;
+        --ink: #173726;
+        --muted: #5b695f;
+        --line: #e7dbc0;
+        --accent: #1f5f3e;
+        --accent-2: #d6a92e;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(214, 169, 46, 0.18), transparent 24%),
+          linear-gradient(180deg, #fdf8ec 0%, var(--bg) 100%);
+      }
+
+      main {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 40px 20px 56px;
+      }
+
+      .hero {
+        background: var(--accent);
+        color: #fff;
+        border-radius: 22px;
+        padding: 28px 28px 22px;
+        box-shadow: 0 18px 60px rgba(31, 95, 62, 0.18);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.8);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 3.2rem);
+        line-height: 1;
+      }
+
+      .hero p {
+        margin: 12px 0 0;
+        max-width: 54ch;
+        font: 400 1.02rem/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: rgba(255, 255, 255, 0.92);
+      }
+
+      .meta {
+        display: inline-flex;
+        margin-top: 16px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        font: 500 0.92rem/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .card {
+        margin-top: 22px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 26px;
+        box-shadow: 0 14px 40px rgba(33, 44, 37, 0.06);
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 1.5rem;
+      }
+
+      p,
+      li {
+        font: 400 1rem/1.7 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--muted);
+      }
+
+      p { margin: 0 0 14px; }
+
+      ul {
+        margin: 0 0 14px 20px;
+        padding: 0;
+      }
+
+      strong {
+        color: var(--ink);
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      .summary {
+        display: grid;
+        gap: 14px;
+      }
+
+      .summary-item {
+        border-left: 4px solid var(--accent-2);
+        padding-left: 14px;
+      }
+
+      footer {
+        margin-top: 22px;
+        text-align: center;
+        font: 400 0.95rem/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--muted);
+      }
+
+      @media (max-width: 640px) {
+        main {
+          padding: 18px 12px 30px;
+        }
+
+        .hero,
+        .card {
+          border-radius: 16px;
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Inspecciona</p>
+        <h1>Política de privadesa</h1>
+        <p>
+          Aquesta política explica quines dades tracta l'extensió Inspecciona,
+          amb quina finalitat i en quins casos es transmeten a serveis externs.
+        </p>
+        <div class="meta">Darrera actualització: 18 de juny de 2026</div>
+      </section>
+
+      <section class="card summary">
+        <div class="summary-item">
+          <p><strong>Resum curt:</strong> Inspecciona no ven dades, no mostra publicitat i no carrega codi remot.</p>
+        </div>
+        <div class="summary-item">
+          <p><strong>Només envia text a revisió quan l'usuari ho demana</strong> per obtenir correccions, sinònims o suggeriments de Softcatalà.</p>
+        </div>
+        <div class="summary-item">
+          <p><strong>Només desa preferències de funcionament</strong> com la variant lingüística o si l'assistent està activat.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>1. Responsable</h2>
+        <p>
+          Inspecciona és una extensió de navegador mantinguda per Frolesti.
+          Si tens dubtes sobre aquesta política o sobre el tractament de dades,
+          pots contactar a través dels canals públics del projecte a GitHub.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>2. Què fa l'extensió</h2>
+        <p>
+          Inspecciona ajuda a revisar textos en català dins de camps editables de
+          pàgines web. L'extensió pot:
+        </p>
+        <ul>
+          <li>detectar possibles errors ortogràfics, gramaticals i tipogràfics,</li>
+          <li>consultar sinònims,</li>
+          <li>oferir autocompletat de paraules,</li>
+          <li>desar preferències de configuració de l'usuari.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>3. Dades que es tracten</h2>
+        <p>
+          Inspecciona tracta únicament les dades necessàries per funcionar:
+        </p>
+        <ul>
+          <li>
+            <strong>Text que l'usuari decideix revisar</strong>, cercar com a sinònim
+            o utilitzar com a prefix per a l'autocompletat.
+          </li>
+          <li>
+            <strong>Preferències de configuració</strong>, com ara la variant
+            lingüística, les opcions tipogràfiques i l'estat activat/desactivat de l'extensió.
+          </li>
+        </ul>
+        <p>
+          Inspecciona no recull noms, correus electrònics, contrasenyes,
+          dades de pagament ni identificadors personals com a finalitat pròpia.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>4. Com i quan s'envien dades a tercers</h2>
+        <p>
+          Quan l'usuari utilitza les funcions de correcció, sinònims o autocompletat,
+          el text necessari per resoldre la consulta s'envia als serveis de Softcatalà
+          mitjançant connexions HTTPS a l'adreça <strong>api.softcatala.org</strong>.
+        </p>
+        <p>
+          Aquest enviament es fa exclusivament per retornar el resultat lingüístic sol·licitat.
+          Inspecciona no envia el text a altres tercers ni l'utilitza per a publicitat.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>5. Permisos del navegador</h2>
+        <p>Inspecciona pot requerir els permisos següents:</p>
+        <ul>
+          <li><strong>storage</strong>: per desar les preferències de l'usuari.</li>
+          <li><strong>activeTab</strong>: per interactuar amb la pestanya activa quan l'usuari usa l'extensió.</li>
+          <li><strong>scripting</strong>: per executar la funcionalitat necessària a la pàgina activa.</li>
+          <li><strong>host permission per a api.softcatala.org</strong>: per comunicar-se amb l'API lingüística de Softcatalà.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>6. Emmagatzematge local</h2>
+        <p>
+          Les preferències es desen mitjançant l'emmagatzematge sincronitzat del navegador.
+          Aquestes dades només s'utilitzen per recordar la configuració de l'extensió.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>7. Codi remot i seguiment</h2>
+        <p>
+          Inspecciona no carrega ni executa JavaScript remot. Tampoc no incorpora
+          analítica, rastrejadors publicitaris ni perfils comercials d'usuari.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>8. Conservació de les dades</h2>
+        <p>
+          Inspecciona no manté una base de dades pròpia de textos revisats. Les preferències
+          es conserven al navegador de l'usuari fins que aquest les modifica o elimina.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>9. Drets i contacte</h2>
+        <p>
+          Si tens dubtes, detectes un error o vols demanar aclariments sobre aquesta política,
+          pots obrir una incidència al repositori del projecte:
+          <a href="https://github.com/frolesti/inspecciona" rel="noopener noreferrer">github.com/frolesti/inspecciona</a>.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>10. Canvis en aquesta política</h2>
+        <p>
+          Aquesta política es pot actualitzar si canvia el funcionament de l'extensió,
+          els permisos utilitzats o els serveis externs integrats. La versió publicada a
+          aquesta pàgina serà la versió vigent.
+        </p>
+      </section>
+
+      <footer>
+        Política de privadesa d'Inspecciona publicada a GitHub Pages.
+      </footer>
+    </main>
+  </body>
+</html>
