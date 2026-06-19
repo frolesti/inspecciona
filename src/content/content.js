@@ -288,19 +288,32 @@
     requestAnimationFrame(() => {
       const width  = state.panel.offsetWidth  || 380;
       const height = state.panel.offsetHeight || 240;
+      const viewportWidth = document.documentElement.clientWidth;
+      const viewportHeight = document.documentElement.clientHeight;
+
+      // Prefer placing the panel OUTSIDE the editable target element bounds
+      // so it doesn't cover the text being corrected.
+      const targetRect = state.selection?.target?.getBoundingClientRect?.();
+      const anchorBottom = targetRect ? Math.max(rect.bottom, targetRect.bottom) : rect.bottom;
+      const anchorTop    = targetRect ? Math.min(rect.top,    targetRect.top)    : rect.top;
 
       let left = window.scrollX + rect.left + (rect.width / 2) - (width / 2);
-      let top  = window.scrollY + rect.bottom + 12;
+      let top  = window.scrollY + anchorBottom + 16;
 
-      const viewportBottom = window.scrollY + document.documentElement.clientHeight - 8;
+      const viewportBottom = window.scrollY + viewportHeight - 8;
       if (top + height > viewportBottom) {
-        top = window.scrollY + rect.top - height - 12;
+        top = window.scrollY + anchorTop - height - 16;
       }
 
       const minLeft = window.scrollX + 8;
-      const maxLeft = window.scrollX + document.documentElement.clientWidth - width - 8;
+      const maxLeft = window.scrollX + viewportWidth - width - 8;
       left = Math.max(minLeft, Math.min(left, maxLeft));
-      top  = Math.max(window.scrollY + 8, top);
+
+      const minTop = window.scrollY + 8;
+      const maxTop = window.scrollY + viewportHeight - height - 8;
+      top = maxTop < minTop
+        ? minTop
+        : Math.max(minTop, Math.min(top, maxTop));
 
       state.panel.style.left = `${left}px`;
       state.panel.style.top  = `${top}px`;
@@ -315,7 +328,8 @@
   /* ── Corrector ──────────────────────────────────────────────────────── */
   function openCorrectionPanel() {
     if (!state.selection?.target) return;
-    state.workingText = H.extractText(state.selection.target);
+    state.workingText = state.selection.text;
+    state.selection.originalText = state.selection.text; // per aplicar al DOM en tancar
     openPanel("Correcció", state.selection.rect);
     state.panelPreview.textContent = state.workingText;
     setStatus("Revisant…", "loading");
@@ -471,8 +485,26 @@
 
   function applySingleReplacement(offset, length, replacement) {
     if (!state.selection?.target) return;
+
+    // Si la fila de suggeriments és antiga (per una revisió prèvia),
+    // ignorem l'acció per evitar corrupció del text seleccionat.
+    if (!Number.isInteger(offset) || !Number.isInteger(length) || length <= 0) {
+      setStatus("S'ha desactualitzat la revisió. Tornant a calcular…", "warn");
+      runCheck();
+      return;
+    }
+
+    if (offset < 0 || (offset + length) > state.workingText.length) {
+      setStatus("S'ha desactualitzat la revisió. Tornant a calcular…", "warn");
+      runCheck();
+      return;
+    }
+
     state.workingText = H.replaceTextSlice(state.workingText, offset, length, replacement);
-    H.setText(state.selection.target, state.workingText);
+
+    applyWorkingTextToSelection();
+    state.panelResults.replaceChildren();
+    setStatus("Revisant…", "loading");
     runCheck();
   }
 
@@ -524,19 +556,63 @@
   function replaceSelectionWithWord(word) {
     if (!state.selection?.target) return;
 
-    const fullText = H.extractText(state.selection.target);
-    const fragment = state.selection.text;
-    const start = fullText.indexOf(fragment);
-
-    if (start < 0) {
-      H.setText(state.selection.target, word);
-    } else {
-      const next = fullText.slice(0, start) + word + fullText.slice(start + fragment.length);
-      H.setText(state.selection.target, next);
-    }
+    state.workingText = word;
+    state.selection.text = state.workingText;
+    applyWorkingTextToSelection();
 
     closePanel();
     hideToolbar();
+  }
+
+  function applyWorkingTextToSelection() {
+    if (!state.selection?.target) return;
+
+    if (state.selection.kind === "text-control") {
+      const input = state.selection.target;
+      const full = input.value;
+      const start = state.selection.start;
+      const end = state.selection.end;
+
+      const next = full.slice(0, start) + state.workingText + full.slice(end);
+      input.value = next;
+      input.selectionStart = start;
+      input.selectionEnd = start + state.workingText.length;
+
+      state.selection.end = input.selectionEnd;
+
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+
+    const target = state.selection.target;
+    const range = state.selection.range;
+    if (!range || !range.startContainer?.isConnected) {
+      // Evitem reemplaçar tot el camp si l'editor ha invalidat el rang original.
+      setStatus("La selecció ja no és vàlida. Torna a seleccionar el fragment.", "warn");
+      return;
+    }
+
+    // Restaurem la selecció original i inserim el text definitiu.
+    // Usem deleteContents + insertNode amb referència directa al node de text
+    // per evitar la reconstrucció de rang que causava duplicacions amb execCommand.
+    range.deleteContents();
+    const textNode = document.createTextNode(state.workingText);
+    range.insertNode(textNode);
+
+    // Actualitzem el rang per cobrir exactament el text inserit.
+    // setStartBefore/setEndAfter és robust perquè usa referència directa al node.
+    const newRange = document.createRange();
+    newRange.setStartBefore(textNode);
+    newRange.setEndAfter(textNode);
+    state.selection.range = newRange;
+
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(newRange.cloneRange());
+
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    target.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
   /* ── Varietat dialectal ─────────────────────────────────────────────── */
@@ -616,7 +692,9 @@
 
       return {
         kind: "text-control",
-        text: text.trim(),
+        text,
+        start,
+        end,
         rect: editable.getBoundingClientRect(),
         target: editable
       };
@@ -625,8 +703,8 @@
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
 
-    const text = selection.toString().trim();
-    if (!text) return null;
+    const text = selection.toString();
+    if (!text.trim()) return null;
 
     const anchorEditable = H.isEditableTarget(selection.anchorNode);
     if (anchorEditable !== editable) return null;
@@ -641,6 +719,7 @@
     return {
       kind: "contenteditable",
       text,
+      range: range.cloneRange(),
       rect,
       target: editable
     };

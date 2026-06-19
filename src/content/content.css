@@ -103,7 +103,7 @@
   display: none;
   flex-direction: column;
   width: min(380px, calc(100vw - 16px));
-  max-height: min(560px, calc(100vh - 16px));
+  max-height: min(560px, calc(100dvh - 16px));
   background: var(--insp-cream);
   border: 1px solid var(--insp-cream-edge);
   border-radius: var(--insp-radius);
@@ -157,6 +157,8 @@
 .insp-panel-close:hover { opacity: 1; background: rgba(255,255,255,0.15); }
 
 .insp-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
