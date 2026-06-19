@@ -1,8 +1,8 @@
 ﻿{
     "manifest_version":  3,
     "name":  "Inspecciona",
-    "version":  "1.0.1",
-    "description":  "Corrector ortogràfic, gramatical i tipogràfic per al català. Fa servir l'API de Softcatalà per a la revisió de textos.",
+    "version":  "1.0.2",
+    "description":  "Corrector ortogràfic, gramatical i tipogràfic per al català. Fa servir l\u0027API de Softcatalà per a la revisió de textos.",
     "permissions":  [
                         "storage",
                         "activeTab",
