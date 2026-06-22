@@ -12,7 +12,17 @@
     const element = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;
     if (!element || !element.closest) return null;
 
-    return element.closest("[contenteditable='true'], [contenteditable='plaintext-only']") || null;
+    const editable = element.closest("[contenteditable]");
+    if (editable) {
+      const mode = String(editable.getAttribute("contenteditable") || "").toLowerCase();
+      if (mode !== "false") return editable;
+    }
+
+    if (element instanceof HTMLElement && element.isContentEditable) {
+      return element;
+    }
+
+    return null;
   }
 
   function extractText(target) {

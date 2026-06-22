@@ -261,6 +261,12 @@
 
 .insp-btn-ghost:hover { background: rgba(31, 95, 62, 0.08); color: var(--insp-ink); }
 
+.insp-btn-ghost.is-active {
+  background: var(--insp-green);
+  color: #fff;
+  border-color: var(--insp-green);
+}
+
 /* ── Llistat de matches del corrector ───────────────────────── */
 .insp-results {
   display: flex;

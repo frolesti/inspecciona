@@ -30,6 +30,7 @@
   const state = {
     selection: null,
     workingText: "",
+    matchFilter: "all",
     lastMatches: [],
     dismissed: new Set(),
     prefs: { ...PREF_DEFAULTS },
@@ -264,6 +265,7 @@
   }
 
   function closePanel() {
+    unwrapAnchor();
     state.panel?.classList.remove("is-open");
   }
 
@@ -276,6 +278,7 @@
     state.panelPreview.textContent = "";
     state.panelActions.replaceChildren();
     state.panelResults.replaceChildren();
+    state.matchFilter = "all";
     state.lastMatches = [];
     state.dismissed = new Set();
     state.panelDragged = false;
@@ -329,7 +332,6 @@
   function openCorrectionPanel() {
     if (!state.selection?.target) return;
     state.workingText = state.selection.text;
-    state.selection.originalText = state.selection.text; // per aplicar al DOM en tancar
     openPanel("Correcció", state.selection.rect);
     state.panelPreview.textContent = state.workingText;
     setStatus("Revisant…", "loading");
@@ -366,9 +368,10 @@
 
     renderPreviewWithMarks(state.workingText, allMatches);
     state.panelResults.replaceChildren();
-    state.panelActions.replaceChildren();
+    renderMatchFilters();
 
     const visible = allMatches.filter((match) => !state.dismissed.has(matchKey(match)));
+    const filtered = visible.filter((match) => matchPassesFilter(match));
 
     if (allMatches.length === 0) {
       setStatus("Cap error detectat.", "ok");
@@ -380,11 +383,56 @@
       return;
     }
 
-    setStatus(`${visible.length} ${visible.length === 1 ? "incidència" : "incidències"}.`, "info");
+    if (filtered.length === 0) {
+      setStatus("No hi ha incidències del tipus seleccionat.", "info");
+      return;
+    }
 
-    for (const match of visible.slice(0, 50)) {
+    setStatus(`${filtered.length} ${filtered.length === 1 ? "incidència" : "incidències"}.`, "info");
+
+    for (const match of filtered.slice(0, 50)) {
       state.panelResults.appendChild(buildMatchRow(match));
     }
+  }
+
+  function renderMatchFilters() {
+    if (!state.panelActions) return;
+
+    const filters = [
+      { value: "all", label: "Tots" },
+      { value: "spelling", label: "Ortogràfics" },
+      { value: "grammar", label: "Gramaticals" }
+    ];
+
+    const controls = document.createElement("div");
+    controls.className = "insp-filters";
+
+    for (const filter of filters) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "insp-btn insp-btn-ghost";
+      button.textContent = filter.label;
+      button.setAttribute("aria-pressed", String(state.matchFilter === filter.value));
+      if (state.matchFilter === filter.value) {
+        button.classList.add("is-active");
+      }
+      button.addEventListener("click", () => {
+        if (state.matchFilter === filter.value) return;
+        state.matchFilter = filter.value;
+        renderCorrections({ matches: state.lastMatches });
+      });
+      controls.appendChild(button);
+    }
+
+    state.panelActions.replaceChildren(controls);
+  }
+
+  function matchPassesFilter(match) {
+    if (state.matchFilter === "all") return true;
+    const kind = categorizeMatch(match);
+    if (state.matchFilter === "spelling") return kind === "typo";
+    if (state.matchFilter === "grammar") return kind !== "typo";
+    return true;
   }
 
   function matchKey(match) {
@@ -586,33 +634,39 @@
     }
 
     const target = state.selection.target;
-    const range = state.selection.range;
-    if (!range || !range.startContainer?.isConnected) {
-      // Evitem reemplaçar tot el camp si l'editor ha invalidat el rang original.
-      setStatus("La selecció ja no és vàlida. Torna a seleccionar el fragment.", "warn");
-      return;
+
+    // Estratègia per contenteditable: substituïm la selecció inicial per un
+    // <span data-insp-anchor> i, a partir d'aquí, cada nova correcció només
+    // actualitza el textContent del span. És robust davant de qualsevol
+    // mutació del DOM que faci l'editor (Gmail, etc.).
+    if (state.selection.anchor && state.selection.anchor.isConnected) {
+      state.selection.anchor.textContent = state.workingText;
+    } else {
+      const range = state.selection.range;
+      if (!range || !range.startContainer?.isConnected) {
+        setStatus("La selecció ja no és vàlida. Torna a seleccionar el fragment.", "warn");
+        return;
+      }
+      range.deleteContents();
+      const span = document.createElement("span");
+      span.setAttribute("data-insp-anchor", "");
+      span.textContent = state.workingText;
+      range.insertNode(span);
+      state.selection.anchor = span;
     }
-
-    // Restaurem la selecció original i inserim el text definitiu.
-    // Usem deleteContents + insertNode amb referència directa al node de text
-    // per evitar la reconstrucció de rang que causava duplicacions amb execCommand.
-    range.deleteContents();
-    const textNode = document.createTextNode(state.workingText);
-    range.insertNode(textNode);
-
-    // Actualitzem el rang per cobrir exactament el text inserit.
-    // setStartBefore/setEndAfter és robust perquè usa referència directa al node.
-    const newRange = document.createRange();
-    newRange.setStartBefore(textNode);
-    newRange.setEndAfter(textNode);
-    state.selection.range = newRange;
-
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(newRange.cloneRange());
 
     target.dispatchEvent(new Event("input", { bubbles: true }));
     target.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function unwrapAnchor() {
+    const anchor = state.selection?.anchor;
+    if (!anchor) return;
+    if (anchor.isConnected) {
+      const textNode = document.createTextNode(anchor.textContent || "");
+      anchor.replaceWith(textNode);
+    }
+    state.selection.anchor = null;
   }
 
   /* ── Varietat dialectal ─────────────────────────────────────────────── */
