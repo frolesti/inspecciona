@@ -361,9 +361,10 @@
   }
 
   function renderCorrections(data) {
-    const allMatches = (data?.matches || [])
-      .filter((match) => Number.isInteger(match.offset) && Number.isInteger(match.length) && match.length > 0)
-      .map((match, index) => ({ ...match, _inspMatchId: matchId(match, index) }));
+    const allMatches = (data?.matches || []).filter(
+      (match) => Number.isInteger(match.offset) && Number.isInteger(match.length) && match.length > 0
+    );
+    allMatches.forEach((match, index) => { match.__id = index; });
     state.lastMatches = allMatches;
 
     renderPreviewWithMarks(state.workingText, allMatches);
@@ -393,11 +394,6 @@
     for (const match of filtered.slice(0, 50)) {
       state.panelResults.appendChild(buildMatchRow(match));
     }
-  }
-
-  function matchId(match, index) {
-    const ruleId = String(match?.rule?.id || "");
-    return `${index}:${match.offset}:${match.length}:${ruleId}`;
   }
 
   function renderMatchFilters() {
@@ -440,6 +436,16 @@
     return true;
   }
 
+  function highlightMatch(id, on) {
+    if (!Number.isInteger(id) || !state.panelPreview) return;
+    const mark = state.panelPreview.querySelector(`.insp-mark[data-match-id="${id}"]`);
+    if (!mark) return;
+    mark.classList.toggle("is-hover", on);
+    if (on) {
+      mark.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }
+
   function matchKey(match) {
     const slice = state.workingText.slice(match.offset, match.offset + match.length);
     return `${slice}::${match.message || ""}`;
@@ -477,7 +483,9 @@
       const marker = document.createElement("mark");
       marker.className = "insp-mark";
       marker.dataset.kind = categorizeMatch(match);
-      marker.dataset.matchId = match._inspMatchId || "";
+      if (Number.isInteger(match.__id)) {
+        marker.dataset.matchId = String(match.__id);
+      }
       marker.textContent = text.slice(start, end);
       state.panelPreview.appendChild(marker);
 
@@ -497,23 +505,11 @@
     const row = document.createElement("div");
     row.className = "insp-match";
     row.dataset.kind = categorizeMatch(match);
-    row.dataset.matchId = match._inspMatchId || "";
-
-    row.addEventListener("mouseenter", () => {
-      const id = row.dataset.matchId;
-      if (!id) return;
-      state.panelPreview
-        ?.querySelector(`.insp-mark[data-match-id=\"${CSS.escape(id)}\"]`)
-        ?.classList.add("is-hovered");
-    });
-
-    row.addEventListener("mouseleave", () => {
-      const id = row.dataset.matchId;
-      if (!id) return;
-      state.panelPreview
-        ?.querySelector(`.insp-mark[data-match-id=\"${CSS.escape(id)}\"]`)
-        ?.classList.remove("is-hovered");
-    });
+    if (Number.isInteger(match.__id)) {
+      row.dataset.matchId = String(match.__id);
+    }
+    row.addEventListener("mouseenter", () => highlightMatch(match.__id, true));
+    row.addEventListener("mouseleave", () => highlightMatch(match.__id, false));
 
     const dismiss = document.createElement("button");
     dismiss.type = "button";
@@ -574,6 +570,8 @@
     state.workingText = H.replaceTextSlice(state.workingText, offset, length, replacement);
 
     applyWorkingTextToSelection();
+    // No buidem la llista actual: la deixem fins que arribin els nous
+    // resultats per evitar el parpelleig entre l'aplicació i la revisió.
     setStatus("Revisant…", "loading");
     runCheck();
   }

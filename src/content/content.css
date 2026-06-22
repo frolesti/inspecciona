@@ -201,11 +201,18 @@
 .insp-mark[data-kind="grammar"] { text-decoration-color: #2c5d8a; background: rgba(44, 93, 138, 0.18); }
 .insp-mark[data-kind="style"]   { text-decoration-color: #1f5f3e; background: rgba(31, 95, 62, 0.18); }
 
-.insp-mark.is-hovered {
-  filter: saturate(1.15) brightness(0.92);
-  transform: scale(1.06);
-  display: inline-block;
+.insp-mark {
+  transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
+
+.insp-mark.is-hover {
+  box-shadow: 0 0 0 2px rgba(31, 95, 62, 0.25);
+  transform: scale(1.04);
+}
+
+.insp-mark[data-kind="typo"].is-hover    { background: rgba(192, 57, 43, 0.45); }
+.insp-mark[data-kind="grammar"].is-hover { background: rgba(44, 93, 138, 0.45); }
+.insp-mark[data-kind="style"].is-hover   { background: rgba(31, 95, 62, 0.45); }
 
 .insp-match[data-kind="typo"]    { border-left: 3px solid #c0392b; }
 .insp-match[data-kind="grammar"] { border-left: 3px solid #2c5d8a; }
