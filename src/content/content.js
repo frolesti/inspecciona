@@ -439,8 +439,10 @@
   function highlightMatch(id, on) {
     if (!Number.isInteger(id) || !state.panelPreview) return;
     const mark = state.panelPreview.querySelector(`.insp-mark[data-match-id="${id}"]`);
+    const row = state.panelResults?.querySelector(`.insp-match[data-match-id="${id}"]`);
     if (!mark) return;
     mark.classList.toggle("is-hover", on);
+    row?.classList.toggle("is-hover", on);
     if (on) {
       mark.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
@@ -670,6 +672,7 @@
       range.deleteContents();
       const span = document.createElement("span");
       span.setAttribute("data-insp-anchor", "");
+      span.style.whiteSpace = "pre-wrap";
       span.textContent = state.workingText;
       range.insertNode(span);
       state.selection.anchor = span;

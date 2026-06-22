@@ -206,13 +206,17 @@
 }
 
 .insp-mark.is-hover {
-  box-shadow: 0 0 0 2px rgba(31, 95, 62, 0.25);
+  box-shadow: 0 0 0 2px rgba(214, 169, 46, 0.35);
   transform: scale(1.04);
+  animation: insp-mark-pulse 220ms ease-out;
 }
 
 .insp-mark[data-kind="typo"].is-hover    { background: rgba(192, 57, 43, 0.45); }
 .insp-mark[data-kind="grammar"].is-hover { background: rgba(44, 93, 138, 0.45); }
 .insp-mark[data-kind="style"].is-hover   { background: rgba(31, 95, 62, 0.45); }
+.insp-mark[data-kind="typo"].is-hover    { box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.35); }
+.insp-mark[data-kind="grammar"].is-hover { box-shadow: 0 0 0 2px rgba(44, 93, 138, 0.35); }
+.insp-mark[data-kind="style"].is-hover   { box-shadow: 0 0 0 2px rgba(31, 95, 62, 0.35); }
 
 .insp-match[data-kind="typo"]    { border-left: 3px solid #c0392b; }
 .insp-match[data-kind="grammar"] { border-left: 3px solid #2c5d8a; }
@@ -296,6 +300,51 @@
   border: 1px solid var(--insp-cream-edge);
   border-left: 3px solid var(--insp-cream-edge);
   border-radius: 10px;
+  transition: box-shadow 140ms ease, transform 140ms ease, border-color 140ms ease;
+}
+
+.insp-match.is-hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -8px rgba(214, 169, 46, 0.45);
+  border-color: rgba(214, 169, 46, 0.55);
+  animation: insp-row-pulse 220ms ease-out;
+}
+
+.insp-match[data-kind="typo"].is-hover {
+  border-color: rgba(192, 57, 43, 0.55);
+  box-shadow: 0 4px 12px -8px rgba(192, 57, 43, 0.5);
+}
+
+.insp-match[data-kind="grammar"].is-hover {
+  border-color: rgba(44, 93, 138, 0.55);
+  box-shadow: 0 4px 12px -8px rgba(44, 93, 138, 0.5);
+}
+
+.insp-match[data-kind="style"].is-hover {
+  border-color: rgba(31, 95, 62, 0.55);
+  box-shadow: 0 4px 12px -8px rgba(31, 95, 62, 0.5);
+}
+
+@keyframes insp-mark-pulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.04); }
+}
+
+@keyframes insp-row-pulse {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insp-mark,
+  .insp-match {
+    transition: none;
+  }
+
+  .insp-mark.is-hover,
+  .insp-match.is-hover {
+    animation: none;
+  }
 }
 
 .insp-match-dismiss {
