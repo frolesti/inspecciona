@@ -201,6 +201,12 @@
 .insp-mark[data-kind="grammar"] { text-decoration-color: #2c5d8a; background: rgba(44, 93, 138, 0.18); }
 .insp-mark[data-kind="style"]   { text-decoration-color: #1f5f3e; background: rgba(31, 95, 62, 0.18); }
 
+.insp-mark.is-hovered {
+  filter: saturate(1.15) brightness(0.92);
+  transform: scale(1.06);
+  display: inline-block;
+}
+
 .insp-match[data-kind="typo"]    { border-left: 3px solid #c0392b; }
 .insp-match[data-kind="grammar"] { border-left: 3px solid #2c5d8a; }
 .insp-match[data-kind="style"]   { border-left: 3px solid #1f5f3e; }

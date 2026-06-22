@@ -361,9 +361,9 @@
   }
 
   function renderCorrections(data) {
-    const allMatches = (data?.matches || []).filter(
-      (match) => Number.isInteger(match.offset) && Number.isInteger(match.length) && match.length > 0
-    );
+    const allMatches = (data?.matches || [])
+      .filter((match) => Number.isInteger(match.offset) && Number.isInteger(match.length) && match.length > 0)
+      .map((match, index) => ({ ...match, _inspMatchId: matchId(match, index) }));
     state.lastMatches = allMatches;
 
     renderPreviewWithMarks(state.workingText, allMatches);
@@ -393,6 +393,11 @@
     for (const match of filtered.slice(0, 50)) {
       state.panelResults.appendChild(buildMatchRow(match));
     }
+  }
+
+  function matchId(match, index) {
+    const ruleId = String(match?.rule?.id || "");
+    return `${index}:${match.offset}:${match.length}:${ruleId}`;
   }
 
   function renderMatchFilters() {
@@ -472,6 +477,7 @@
       const marker = document.createElement("mark");
       marker.className = "insp-mark";
       marker.dataset.kind = categorizeMatch(match);
+      marker.dataset.matchId = match._inspMatchId || "";
       marker.textContent = text.slice(start, end);
       state.panelPreview.appendChild(marker);
 
@@ -491,6 +497,23 @@
     const row = document.createElement("div");
     row.className = "insp-match";
     row.dataset.kind = categorizeMatch(match);
+    row.dataset.matchId = match._inspMatchId || "";
+
+    row.addEventListener("mouseenter", () => {
+      const id = row.dataset.matchId;
+      if (!id) return;
+      state.panelPreview
+        ?.querySelector(`.insp-mark[data-match-id=\"${CSS.escape(id)}\"]`)
+        ?.classList.add("is-hovered");
+    });
+
+    row.addEventListener("mouseleave", () => {
+      const id = row.dataset.matchId;
+      if (!id) return;
+      state.panelPreview
+        ?.querySelector(`.insp-mark[data-match-id=\"${CSS.escape(id)}\"]`)
+        ?.classList.remove("is-hovered");
+    });
 
     const dismiss = document.createElement("button");
     dismiss.type = "button";
@@ -551,7 +574,6 @@
     state.workingText = H.replaceTextSlice(state.workingText, offset, length, replacement);
 
     applyWorkingTextToSelection();
-    state.panelResults.replaceChildren();
     setStatus("Revisant…", "loading");
     runCheck();
   }
