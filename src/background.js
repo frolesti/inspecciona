@@ -19,9 +19,9 @@ const SINONIMS_SEARCH_BASE = "https://api.softcatala.org/sinonims/v1/api/search/
 const SINONIMS_AUTOCOMPLETE_BASE = "https://api.softcatala.org/sinonims/v1/api/autocomplete/";
 
 const VARIANT_TO_LT = {
-  general: "",
+  general:  "ca-ES",
   valencia: "ca-ES-valencia",
-  balear: "ca-ES-balear"
+  balear:   "ca-ES-balear"
 };
 
 /* Mapatge de preferències d'usuari → noms de regla de LanguageTool/Softcatalà.
@@ -238,14 +238,11 @@ async function handleCheckMessage(message) {
   }
 
   const variant = message?.variant || "general";
-  const preferred = VARIANT_TO_LT[variant] || VARIANT_TO_LT.general;
+  const language = VARIANT_TO_LT[variant] || VARIANT_TO_LT.general;
 
   const form = new URLSearchParams();
   form.set("text", text);
-  form.set("language", "ca-ES");
-  if (preferred) {
-    form.set("preferredVariants", preferred);
-  }
+  form.set("language", language);
 
   const flags = buildRuleFlags(message?.prefs || {});
   if (flags.enabledRules)  form.set("enabledRules",  flags.enabledRules);
