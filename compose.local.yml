@@ -1,0 +1,42 @@
+services:
+  languagetool:
+    image: maven:3.9.6-eclipse-temurin-17
+    working_dir: /work/languagetool
+    environment:
+      TZ: Europe/Madrid
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Europe/Madrid
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./backend/languagetool:/work/languagetool
+      - languagetool-m2:/root/.m2
+    command: >
+      sh -lc "mvn -P=-jdk17 -T 1C -pl languagetool-server -am -Dmaven.test.skip=true clean package;
+      mvn -P=-jdk17 -pl languagetool-server -am -Dmaven.test.skip=true dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=target/libs -Dmdep.stripVersion=true;
+      cp -f languagetool-core/target/languagetool-core-6.9-SNAPSHOT.jar languagetool-server/target/libs/languagetool-core.jar;
+      cp -f languagetool-language-modules/ca/target/language-ca-6.9-SNAPSHOT.jar languagetool-server/target/libs/language-ca.jar;
+      jar=$$(find languagetool-server/target -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' 2>/dev/null | head -n 1);
+      test -n \"$$jar\";
+      java -jar \"$$jar\" --port 8081 --public"
+
+  sinonims:
+    image: maven:3.9.6-eclipse-temurin-17
+    working_dir: /work/sinonims-cat
+    environment:
+      TZ: Europe/Madrid
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Europe/Madrid
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/sinonims-cat:/work/sinonims-cat
+      - ./local-backend/configs:/work/config
+      - ./local-backend/data:/work/data
+      - sinonims-m2:/root/.m2
+    command: >
+      sh -lc "mvn -f server/pom.xml -DskipTests package
+      && java -jar server/target/sinonims-0.0.1-SNAPSHOT-jar-with-dependencies.jar --config /work/config/sinonims-prebuild.cfg
+      && java -jar server/target/sinonims-0.0.1-SNAPSHOT-jar-with-dependencies.jar --config /work/config/sinonims.cfg"
+
+volumes:
+  languagetool-m2:
+  sinonims-m2:

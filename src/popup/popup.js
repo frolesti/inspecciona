@@ -1,6 +1,7 @@
 const DEFAULTS = {
   variant: "general",
   autoOpenHelper: true,
+  autoOpenDonationOnLimit: true,
   diacritics: "iec",
   pronomSe: "simple",
   cometesTypo: false,
@@ -20,11 +21,13 @@ const RADIO_GROUPS = [
   "percent", "hora"
 ];
 
-const CHECKBOX_FIELDS = ["cometesTypo", "puntsSuspe"];
+const CHECKBOX_FIELDS = ["cometesTypo", "puntsSuspe", "autoOpenDonationOnLimit"];
 
 const toggleInput    = document.getElementById("autoOpenHelper");
 const toggleTitleEl  = document.getElementById("toggleTitle");
 const toggleStatusEl = document.getElementById("toggleStatus");
+const limitNotice = document.getElementById("limitNotice");
+const limitNoticeText = document.getElementById("limitNoticeText");
 
 restore();
 wirePillsVisual();
@@ -46,9 +49,26 @@ function restore() {
     toggleInput.checked = items.autoOpenHelper !== false;
     applyEnabledState(toggleInput.checked);
   });
+
+  chrome.storage.local.get({ inspeccionaLimitNotice: null }, (items) => {
+    const info = items?.inspeccionaLimitNotice;
+    if (!info?.active) {
+      if (limitNotice) limitNotice.hidden = true;
+      return;
+    }
+
+    const when = info.at ? new Date(info.at).toLocaleString("ca-ES") : "ara mateix";
+    const status = info.status ? ` (${info.status})` : "";
+    if (limitNoticeText) {
+      limitNoticeText.textContent = `S'ha detectat un limit d'us del backend${status}. Darrera incidència: ${when}.`;
+    }
+    if (limitNotice) {
+      limitNotice.hidden = false;
+    }
+  });
 }
 
-function saveOptions() {
+async function saveOptions() {
   const payload = { autoOpenHelper: toggleInput.checked };
   for (const group of RADIO_GROUPS) {
     const checked = document.querySelector(`input[name="${group}"]:checked`);
@@ -84,7 +104,7 @@ function wireAutoSave() {
   }
   for (const field of CHECKBOX_FIELDS) {
     const input = document.getElementById(field);
-    input?.addEventListener("change", () => saveOptions());
+    input?.addEventListener("change", () => { saveOptions(); });
   }
 }
 

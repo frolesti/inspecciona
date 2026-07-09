@@ -1,0 +1,83 @@
+services:
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      - languagetool
+      - sinonims
+    environment:
+      CORRECTOR_HOST: ${CORRECTOR_HOST}
+      SINONIMS_HOST: ${SINONIMS_HOST}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  languagetool:
+    image: maven:3.9.6-eclipse-temurin-17
+    restart: unless-stopped
+    working_dir: /work/languagetool
+    environment:
+      TZ: ${TZ:-Europe/Madrid}
+      JAVA_TOOL_OPTIONS: -Duser.timezone=${TZ:-Europe/Madrid} -Xms256m -Xmx${LT_HEAP_MB:-1536}m
+      FORCE_REBUILD: ${FORCE_REBUILD:-false}
+    expose:
+      - "8081"
+    volumes:
+      - ./backend/languagetool:/work/languagetool
+      - languagetool-m2:/root/.m2
+    command: >
+      sh -lc '
+      jar_path=$$(find languagetool-server/target -maxdepth 1 -type f -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" 2>/dev/null | head -n 1);
+      if [ "$${FORCE_REBUILD}" = "true" ] || [ -z "$${jar_path}" ]; then
+        mvn -P=-jdk17 -T 1C -pl languagetool-server -am -Dmaven.test.skip=true clean package;
+        mvn -P=-jdk17 -pl languagetool-server -am -Dmaven.test.skip=true dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=target/libs -Dmdep.stripVersion=true;
+        core_jar=$$(find languagetool-core/target -maxdepth 1 -type f -name "languagetool-core-*.jar" ! -name "*sources*" ! -name "*javadoc*" 2>/dev/null | head -n 1);
+        ca_jar=$$(find languagetool-language-modules/ca/target -maxdepth 1 -type f -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" 2>/dev/null | head -n 1);
+        test -n "$${core_jar}";
+        test -n "$${ca_jar}";
+        cp -f "$${core_jar}" languagetool-server/target/libs/languagetool-core.jar;
+        cp -f "$${ca_jar}" languagetool-server/target/libs/language-ca.jar;
+      fi;
+      jar_path=$$(find languagetool-server/target -maxdepth 1 -type f -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" 2>/dev/null | head -n 1);
+      test -n "$${jar_path}";
+      java -jar "$${jar_path}" --port 8081 --public --allow-origin "*"'
+
+  sinonims:
+    image: maven:3.9.6-eclipse-temurin-17
+    restart: unless-stopped
+    working_dir: /work/sinonims-cat
+    environment:
+      TZ: ${TZ:-Europe/Madrid}
+      JAVA_TOOL_OPTIONS: -Duser.timezone=${TZ:-Europe/Madrid}
+      FORCE_REBUILD: ${FORCE_REBUILD:-false}
+    expose:
+      - "8000"
+    volumes:
+      - ./backend/sinonims-cat:/work/sinonims-cat
+      - ./local-backend/configs:/work/config
+      - ./local-backend/data:/work/data
+      - sinonims-m2:/root/.m2
+    command: >
+      sh -lc '
+      app_jar=server/target/sinonims-0.0.1-SNAPSHOT-jar-with-dependencies.jar;
+      if [ "$${FORCE_REBUILD}" = "true" ] || [ ! -s "$${app_jar}" ]; then
+        rm -rf server/target;
+        mvn -f server/pom.xml -DskipTests clean package;
+      fi;
+      test -s "$${app_jar}";
+      if [ ! -f /work/data/.prebuilt ] || [ "$${FORCE_REBUILD}" = "true" ]; then
+        java -jar "$${app_jar}" --config /work/config/sinonims-prebuild.cfg;
+        touch /work/data/.prebuilt;
+      fi;
+      java -jar "$${app_jar}" --config /work/config/sinonims.cfg'
+
+volumes:
+  caddy-data:
+  caddy-config:
+  languagetool-m2:
+  sinonims-m2:

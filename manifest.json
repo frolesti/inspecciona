@@ -2,15 +2,23 @@
     "manifest_version":  3,
     "name":  "Inspecciona",
     "version":  "1.2.1",
-    "description":  "Corrector ortogràfic, gramatical i tipogràfic per al català. Fa servir l\u0027API de Softcatalà per a la revisió de textos.",
+    "description":  "Corrector ortogràfic, gramatical i tipogràfic per al català amb serveis locals (Docker).",
     "permissions":  [
                         "storage",
                         "activeTab",
-                        "scripting"
+                        "scripting",
+                        "permissions"
                     ],
     "host_permissions":  [
-                             "https://api.softcatala.org/*"
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "http://[::1]/*",
+        "https://corrector.34.118.197.141.nip.io/*"
                          ],
+    "optional_host_permissions":  [
+        "https://*/*",
+        "http://*/*"
+    ],
     "background":  {
                        "service_worker":  "src/background.js",
                        "type":  "module"

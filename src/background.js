@@ -1,6 +1,7 @@
 const STORAGE_DEFAULTS = {
   variant: "general",
   autoOpenHelper: true,
+  autoOpenDonationOnLimit: true,
   diacritics: "iec",
   pronomSe: "simple",
   cometesTypo: false,
@@ -14,9 +15,18 @@ const STORAGE_DEFAULTS = {
   hora: ""
 };
 
-const CORRECTOR_ENDPOINT = "https://api.softcatala.org/corrector/v2/check";
-const SINONIMS_SEARCH_BASE = "https://api.softcatala.org/sinonims/v1/api/search/";
-const SINONIMS_AUTOCOMPLETE_BASE = "https://api.softcatala.org/sinonims/v1/api/autocomplete/";
+const VM_BACKEND_BASE_URL = "https://corrector.34.118.197.141.nip.io";
+
+const VM_BACKEND_ENDPOINTS = {
+  mode: "remote",
+  corrector: `${VM_BACKEND_BASE_URL}/v2/check`,
+  sinonimsSearch: `${VM_BACKEND_BASE_URL}/sinonims-api/search/`,
+  sinonimsAutocomplete: `${VM_BACKEND_BASE_URL}/sinonims-api/autocomplete/`
+};
+
+const DONATION_URL = "https://frolesti.aixeta.cat/";
+const LIMIT_STATUS_CODES = new Set([402, 403, 429, 503]);
+const DONATION_AUTOOPEN_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 
 const VARIANT_TO_LT = {
   general:  "ca-ES",
@@ -98,6 +108,104 @@ function buildRuleFlags(prefs = {}) {
 }
 
 const REQUEST_TIMEOUT_MS = 12000;
+
+function getStorageValue(defaults) {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(defaults, (items) => resolve(items));
+  });
+}
+
+function getLocalStorageValue(defaults) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(defaults, (items) => resolve(items));
+  });
+}
+
+async function resolveBackendEndpoints() {
+  return VM_BACKEND_ENDPOINTS;
+}
+
+function getOriginPattern(url) {
+  try {
+    const origin = new URL(url).origin;
+    return `${origin}/*`;
+  } catch {
+    return "";
+  }
+}
+
+function containsHostPermission(url) {
+  const pattern = getOriginPattern(url);
+  if (!pattern) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    chrome.permissions.contains({ origins: [pattern] }, (hasPermission) => {
+      resolve(Boolean(hasPermission));
+    });
+  });
+}
+
+async function assertHostPermission(url) {
+  const hasPermission = await containsHostPermission(url);
+  if (hasPermission) return;
+  throw new Error("Cal autoritzar el domini del backend des del popup abans d'usar aquest servidor.");
+}
+
+function recordBackendUsage(service, url, ok, error = "", mode = "local") {
+  try {
+    chrome.storage.local.set({
+      inspeccionaLastBackend: {
+        service,
+        mode,
+        url,
+        ok,
+        error,
+        at: new Date().toISOString()
+      }
+    });
+  } catch {
+    // Ignore storage write errors in telemetry path.
+  }
+}
+
+async function maybeAutoOpenDonationPage() {
+  const syncPrefs = await getStorageValue({ autoOpenDonationOnLimit: true });
+  if (!syncPrefs.autoOpenDonationOnLimit) return;
+
+  const localState = await getLocalStorageValue({ inspeccionaDonationPrompt: { lastOpenAt: 0 } });
+  const lastOpenAt = Number(localState?.inspeccionaDonationPrompt?.lastOpenAt || 0);
+  const now = Date.now();
+
+  if (now - lastOpenAt < DONATION_AUTOOPEN_COOLDOWN_MS) return;
+
+  chrome.tabs.create({ url: DONATION_URL }, () => {
+    chrome.storage.local.set({
+      inspeccionaDonationPrompt: {
+        lastOpenAt: now,
+        by: "usage-limit"
+      }
+    });
+  });
+}
+
+async function registerUsageLimit(service, url, status) {
+  const nowIso = new Date().toISOString();
+  chrome.storage.local.set({
+    inspeccionaLimitNotice: {
+      active: true,
+      service,
+      url,
+      status,
+      at: nowIso,
+      donationUrl: DONATION_URL
+    }
+  });
+
+  await maybeAutoOpenDonationPage();
+}
+
+function getLimitErrorMessage(status) {
+  return `Hem arribat al limit d'us del servei (${status}). Si vols que segueixi disponible, dona suport al projecte a l'Aixeta.`;
+}
 
 async function fetchWithTimeout(url, init = {}) {
   const controller = new AbortController();
@@ -248,15 +356,25 @@ async function handleCheckMessage(message) {
   if (flags.enabledRules)  form.set("enabledRules",  flags.enabledRules);
   if (flags.disabledRules) form.set("disabledRules", flags.disabledRules);
 
-  const response = await fetchWithTimeout(CORRECTOR_ENDPOINT, {
+  const endpoints = await resolveBackendEndpoints();
+  const url = endpoints.corrector;
+  await assertHostPermission(url);
+  const response = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: form.toString()
   });
 
   if (!response.ok) {
+    recordBackendUsage("corrector", url, false, `HTTP ${response.status}`, endpoints.mode);
+    if (LIMIT_STATUS_CODES.has(response.status)) {
+      await registerUsageLimit("corrector", url, response.status);
+      throw new Error(getLimitErrorMessage(response.status));
+    }
     throw new Error(`El corrector ha respost amb error (${response.status}).`);
   }
+
+  recordBackendUsage("corrector", url, true, "", endpoints.mode);
 
   return response.json();
 }
@@ -267,17 +385,31 @@ async function handleSynonymsMessage(message) {
     throw new Error("Indica una paraula per cercar sinònims.");
   }
 
-  const response = await fetchWithTimeout(SINONIMS_SEARCH_BASE + encodeURIComponent(word), {
+  const endpoints = await resolveBackendEndpoints();
+  const url = endpoints.sinonimsSearch + encodeURIComponent(word);
+  await assertHostPermission(url);
+  const response = await fetchWithTimeout(
+    url,
+    {
     method: "GET"
-  });
+    }
+  );
 
   if (response.status === 404) {
+    recordBackendUsage("sinonimsSearch", url, true, "", endpoints.mode);
     return { results: [] };
   }
 
   if (!response.ok) {
+    recordBackendUsage("sinonimsSearch", url, false, `HTTP ${response.status}`, endpoints.mode);
+    if (LIMIT_STATUS_CODES.has(response.status)) {
+      await registerUsageLimit("sinonims", url, response.status);
+      throw new Error(getLimitErrorMessage(response.status));
+    }
     throw new Error(`Diccionari de sinònims no disponible (${response.status}).`);
   }
+
+  recordBackendUsage("sinonimsSearch", url, true, "", endpoints.mode);
 
   return response.json();
 }
@@ -288,13 +420,26 @@ async function handleAutocompleteMessage(message) {
     return { startWith: "", words: [] };
   }
 
-  const response = await fetchWithTimeout(SINONIMS_AUTOCOMPLETE_BASE + encodeURIComponent(prefix), {
+  const endpoints = await resolveBackendEndpoints();
+  const url = endpoints.sinonimsAutocomplete + encodeURIComponent(prefix);
+  await assertHostPermission(url);
+  const response = await fetchWithTimeout(
+    url,
+    {
     method: "GET"
-  });
+    }
+  );
 
   if (!response.ok) {
+    recordBackendUsage("sinonimsAutocomplete", url, false, `HTTP ${response.status}`, endpoints.mode);
+    if (LIMIT_STATUS_CODES.has(response.status)) {
+      await registerUsageLimit("sinonimsAutocomplete", url, response.status);
+      throw new Error(getLimitErrorMessage(response.status));
+    }
     throw new Error(`Autocomplete no disponible (${response.status}).`);
   }
+
+  recordBackendUsage("sinonimsAutocomplete", url, true, "", endpoints.mode);
 
   return response.json();
 }

@@ -1,0 +1,13 @@
+{$CORRECTOR_HOST} {
+  encode zstd gzip
+  tls {$LETSENCRYPT_EMAIL}
+  @sinonims path /sinonims-api/*
+  reverse_proxy @sinonims sinonims:8000
+  reverse_proxy languagetool:8081
+}
+
+{$SINONIMS_HOST} {
+  encode zstd gzip
+  tls {$LETSENCRYPT_EMAIL}
+  reverse_proxy sinonims:8000
+}

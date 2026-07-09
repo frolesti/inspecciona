@@ -1,6 +1,6 @@
 # Inspecciona
 
-Extensió de Google Chrome centrada en català, amb integració dels serveis de Softcatalà.
+Extensió de Google Chrome centrada en català, integrada amb serveis locals executats amb Docker.
 
 ## Primera versió inclosa
 
@@ -8,31 +8,17 @@ Extensió de Google Chrome centrada en català, amb integració dels serveis de 
 - Cerca de sinònims d'una paraula.
 - Autocomplete de paraules del diccionari de sinònims (funcionalitat addicional de Softcatalà).
 
-## Recerca tècnica d'API (Softcatalà)
+## Backend
 
-S'han comprovat peticions reals fora de la interfície web i funcionen:
+L'extensió funciona exclusivament contra serveis locals:
 
-- Corrector:
-  - Endpoint: `POST https://api.softcatala.org/corrector/v2/check`
-  - Cos: `application/x-www-form-urlencoded`
-  - Paràmetres mínims: `text`, `language=ca-ES`
-  - Paràmetre útil: `preferredVariants=ca-ES|ca-ES-valencia|ca-ES-balear`
-
-- Sinònims:
-  - Endpoint: `GET https://api.softcatala.org/sinonims/v1/api/search/{paraula}`
-  - Retorna `results` amb entrades i llistes de sinònims.
-
-- Suggeriments de paraules:
-  - Endpoint: `GET https://api.softcatala.org/sinonims/v1/api/autocomplete/{prefix}`
-
-Notes:
-- La web de sinònims també té una ruta interna WordPress (`admin-ajax.php` amb `action=find_sinonim`) que necessita `_wpnonce`.
-- Per extensió, és millor usar els endpoints d'`api.softcatala.org` perquè no depenen de nonce ni de la UI web.
+- Corrector local: `http://localhost:8081/v2/check`
+- Sinònims local: `http://localhost:8000/sinonims-api/`
 
 ## Estructura
 
 - `manifest.json`: definició de l'extensió MV3
-- `src/background.js`: crides a API Softcatalà
+- `src/background.js`: crides als serveis locals del backend
 - `src/content/helpers.js`: helpers compartits del content script
 - `src/content/content.js`: lògica UI injectada als camps de text
 - `src/content/content.css`: estils de l'assistent (curt i traçable)
@@ -86,6 +72,24 @@ Aquest script actualitza `manifest.json`, crea commit, tag i fa push.
 2. Prem el botó `Inspecciona` que apareix sobre el camp.
 3. Revisa i aplica correccions.
 4. Cerca sinònims o suggereix paraules per prefix.
+
+## Backend local
+
+Si vols provar l'extensió amb serveis propis, tens un `docker compose` local a `compose.local.yml`.
+
+Flux ràpid:
+
+1. Executa `./scripts/setup-local-backend.ps1` per clonar els repos dels serveis a `backend/`.
+2. Executa `docker compose -f compose.local.yml up --build`.
+3. Carrega l'extensió i comprova que Docker està actiu.
+4. Espera que el backend estigui llest amb `./scripts/check-local-backend.ps1`.
+
+Ports per defecte:
+
+- Corrector: `http://localhost:8081/v2/check`
+- Sinònims: `http://localhost:8000/sinonims-api/`
+
+Els fitxers de configuració del servidor de sinònims viuen a `local-backend/configs/`.
 
 ## Icona
 

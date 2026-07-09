@@ -196,6 +196,28 @@
         font-size: 11px;
       }
 
+      .insp-notice {
+        margin: 0 16px 10px;
+        border: 1px solid #e7c770;
+        background: #fff9e8;
+        color: #5d4708;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .insp-notice p {
+        margin: 0;
+      }
+      .insp-notice a {
+        color: var(--insp-green);
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .insp-notice a:hover {
+        text-decoration: underline;
+      }
+
       /* ── Detalls col·lapsables ─────────────────────────────── */
       details.insp-details {
         background: #fff;
@@ -230,6 +252,22 @@
       .insp-check { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: 12.5px; }
       .insp-check input[type="checkbox"], .insp-check input[type="radio"] {
         width: 14px; height: 14px; accent-color: var(--insp-green);
+      }
+
+      .insp-input {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--insp-cream-edge);
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 12px;
+        color: var(--insp-ink);
+      }
+      .insp-hint {
+        margin: 8px 0 0;
+        font-size: 11px;
+        color: var(--insp-ink-soft);
+        line-height: 1.45;
       }
 
       /* Fila etiqueta + opcions */
@@ -367,6 +405,11 @@
 
       <div class="insp-scroll">
 
+        <div id="limitNotice" class="insp-notice" hidden>
+          <p id="limitNoticeText"></p>
+          <p style="margin-top:6px;">Si vols, pots ajudar a mantenir el servei fent una donació a <a href="https://frolesti.aixeta.cat/" target="_blank" rel="noopener noreferrer">Aixeta</a>.</p>
+        </div>
+
         <!-- Llegenda -->
         <div class="insp-legend">
           <p>L'inspector destacarà al teu text:</p>
@@ -386,6 +429,22 @@
               <label class="insp-check"><input type="radio" name="variant" value="general" /> Centrals</label>
               <label class="insp-check"><input type="radio" name="variant" value="valencia" /> Valencianes</label>
               <label class="insp-check"><input type="radio" name="variant" value="balear" /> Balears</label>
+            </div>
+          </details>
+        </section>
+
+        <!-- Backend -->
+        <section class="insp-section pt-0">
+          <details class="insp-details">
+            <summary>Servidor</summary>
+            <div class="insp-details-body">
+              <p class="insp-hint">
+                Backend fixat a la VM d'Inspecciona: https://corrector.34.118.197.141.nip.io
+              </p>
+              <label class="insp-check" style="margin-top:8px;">
+                <input type="checkbox" id="autoOpenDonationOnLimit" />
+                <span>Obre Aixeta automàticament quan es detecti límit d'ús</span>
+              </label>
             </div>
           </details>
         </section>
@@ -498,7 +557,7 @@
         <section class="insp-section pt-0">
           <div class="insp-mecenes">
             <p>
-              L'Inspecciona és una eina gratuïta i sense publicitat. Si l'has provada i l'has trobat útil, pots ajudar-me a mantenir-la i a millorar-la fent-te mecenes. Gràcies!
+              L'Inspecciona és gratuïta, però el servei depèn de cobrir costos d'infraestructura. Si t'és útil, les aportacions voluntàries ajuden a mantenir-la operativa.
             </p>
             <a id="aixeta" class="insp-aixeta" href="https://frolesti.aixeta.cat/" target="_blank" rel="noopener noreferrer">
               <span>Dona'm suport a </span><img src="../../assets/aixeta-logo.png" alt="Aixeta" />
