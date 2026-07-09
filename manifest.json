@@ -1,7 +1,7 @@
 ﻿{
     "manifest_version":  3,
     "name":  "Inspecciona",
-    "version":  "1.2.1",
+    "version":  "1.3.0",
     "description":  "Corrector ortogràfic, gramatical i tipogràfic per al català amb serveis locals (Docker).",
     "permissions":  [
                         "storage",
@@ -10,15 +10,15 @@
                         "permissions"
                     ],
     "host_permissions":  [
-        "http://localhost/*",
-        "http://127.0.0.1/*",
-        "http://[::1]/*",
-        "https://corrector.34.118.197.141.nip.io/*"
+                             "http://localhost/*",
+                             "http://127.0.0.1/*",
+                             "http://[::1]/*",
+                             "https://corrector.34.118.197.141.nip.io/*"
                          ],
     "optional_host_permissions":  [
-        "https://*/*",
-        "http://*/*"
-    ],
+                                      "https://*/*",
+                                      "http://*/*"
+                                  ],
     "background":  {
                        "service_worker":  "src/background.js",
                        "type":  "module"
