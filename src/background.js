@@ -1,7 +1,6 @@
 const STORAGE_DEFAULTS = {
   variant: "general",
   autoOpenHelper: true,
-  autoOpenDonationOnLimit: true,
   diacritics: "iec",
   pronomSe: "simple",
   cometesTypo: false,
@@ -25,8 +24,8 @@ const VM_BACKEND_ENDPOINTS = {
 };
 
 const DONATION_URL = "https://frolesti.aixeta.cat/";
-const LIMIT_STATUS_CODES = new Set([402, 403, 429, 503]);
-const DONATION_AUTOOPEN_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+const LIMIT_STATUS_CODES = new Set([402, 403, 429, 503, 504]);
+const OVERLOAD_STATUS_CODES = new Set([429, 503, 504]);
 
 const VARIANT_TO_LT = {
   general:  "ca-ES",
@@ -167,26 +166,6 @@ function recordBackendUsage(service, url, ok, error = "", mode = "local") {
   }
 }
 
-async function maybeAutoOpenDonationPage() {
-  const syncPrefs = await getStorageValue({ autoOpenDonationOnLimit: true });
-  if (!syncPrefs.autoOpenDonationOnLimit) return;
-
-  const localState = await getLocalStorageValue({ inspeccionaDonationPrompt: { lastOpenAt: 0 } });
-  const lastOpenAt = Number(localState?.inspeccionaDonationPrompt?.lastOpenAt || 0);
-  const now = Date.now();
-
-  if (now - lastOpenAt < DONATION_AUTOOPEN_COOLDOWN_MS) return;
-
-  chrome.tabs.create({ url: DONATION_URL }, () => {
-    chrome.storage.local.set({
-      inspeccionaDonationPrompt: {
-        lastOpenAt: now,
-        by: "usage-limit"
-      }
-    });
-  });
-}
-
 async function registerUsageLimit(service, url, status) {
   const nowIso = new Date().toISOString();
   chrome.storage.local.set({
@@ -199,11 +178,12 @@ async function registerUsageLimit(service, url, status) {
       donationUrl: DONATION_URL
     }
   });
-
-  await maybeAutoOpenDonationPage();
 }
 
 function getLimitErrorMessage(status) {
+  if (OVERLOAD_STATUS_CODES.has(status)) {
+    return `Hi ha un pic de trafic i el servidor va saturat (${status}). Torna-ho a provar en uns segons.`;
+  }
   return `Hem arribat al limit d'us del servei (${status}). Si vols que segueixi disponible, dona suport al projecte a l'Aixeta.`;
 }
 
@@ -214,7 +194,7 @@ async function fetchWithTimeout(url, init = {}) {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (error) {
     if (error?.name === "AbortError") {
-      throw new Error("El servei ha trigat massa a respondre.");
+      throw new Error("Hi ha un pic de trafic i el servidor triga massa a respondre. Torna-ho a provar en uns segons.");
     }
     throw new Error("No s'ha pogut connectar amb el servei.");
   } finally {

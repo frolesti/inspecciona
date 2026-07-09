@@ -12,10 +12,15 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+      - caddy-logs:/var/log/caddy
 
   languagetool:
     image: maven:3.9.6-eclipse-temurin-17
@@ -23,10 +28,15 @@ services:
     working_dir: /work/languagetool
     environment:
       TZ: ${TZ:-Europe/Madrid}
-      JAVA_TOOL_OPTIONS: -Duser.timezone=${TZ:-Europe/Madrid} -Xms256m -Xmx${LT_HEAP_MB:-1536}m
+      JAVA_TOOL_OPTIONS: -Duser.timezone=${TZ:-Europe/Madrid} -Xms${LT_XMS_MB:-512}m -Xmx${LT_HEAP_MB:-1536}m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication
       FORCE_REBUILD: ${FORCE_REBUILD:-false}
+      LT_MAX_CHECK_THREADS: ${LT_MAX_CHECK_THREADS:-16}
     expose:
       - "8081"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     volumes:
       - ./backend/languagetool:/work/languagetool
       - languagetool-m2:/root/.m2
@@ -45,7 +55,7 @@ services:
       fi;
       jar_path=$$(find languagetool-server/target -maxdepth 1 -type f -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" 2>/dev/null | head -n 1);
       test -n "$${jar_path}";
-      java -jar "$${jar_path}" --port 8081 --public --allow-origin "*"'
+      java -jar "$${jar_path}" --port 8081 --public --allow-origin "*" --maxCheckThreads "$${LT_MAX_CHECK_THREADS}"'
 
   sinonims:
     image: maven:3.9.6-eclipse-temurin-17
@@ -53,10 +63,14 @@ services:
     working_dir: /work/sinonims-cat
     environment:
       TZ: ${TZ:-Europe/Madrid}
-      JAVA_TOOL_OPTIONS: -Duser.timezone=${TZ:-Europe/Madrid}
+      JAVA_TOOL_OPTIONS: -Duser.timezone=${TZ:-Europe/Madrid} -Xms${SINONIMS_XMS_MB:-256}m -Xmx${SINONIMS_HEAP_MB:-512}m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication
       FORCE_REBUILD: ${FORCE_REBUILD:-false}
     expose:
       - "8000"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     volumes:
       - ./backend/sinonims-cat:/work/sinonims-cat
       - ./local-backend/configs:/work/config
@@ -79,5 +93,6 @@ services:
 volumes:
   caddy-data:
   caddy-config:
+  caddy-logs:
   languagetool-m2:
   sinonims-m2:

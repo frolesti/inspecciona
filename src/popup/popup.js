@@ -1,7 +1,6 @@
 const DEFAULTS = {
   variant: "general",
   autoOpenHelper: true,
-  autoOpenDonationOnLimit: true,
   diacritics: "iec",
   pronomSe: "simple",
   cometesTypo: false,
@@ -21,18 +20,26 @@ const RADIO_GROUPS = [
   "percent", "hora"
 ];
 
-const CHECKBOX_FIELDS = ["cometesTypo", "puntsSuspe", "autoOpenDonationOnLimit"];
+const CHECKBOX_FIELDS = ["cometesTypo", "puntsSuspe"];
 
 const toggleInput    = document.getElementById("autoOpenHelper");
 const toggleTitleEl  = document.getElementById("toggleTitle");
 const toggleStatusEl = document.getElementById("toggleStatus");
 const limitNotice = document.getElementById("limitNotice");
 const limitNoticeText = document.getElementById("limitNoticeText");
+const extensionVersionEl = document.getElementById("extensionVersion");
 
 restore();
 wirePillsVisual();
 wireAutoSave();
+renderVersion();
 toggleInput.addEventListener("change", onToggleChange);
+
+function renderVersion() {
+  if (!extensionVersionEl) return;
+  const manifest = chrome.runtime.getManifest();
+  extensionVersionEl.textContent = `v${manifest.version}`;
+}
 
 function restore() {
   chrome.storage.sync.get(DEFAULTS, (items) => {
@@ -59,8 +66,11 @@ function restore() {
 
     const when = info.at ? new Date(info.at).toLocaleString("ca-ES") : "ara mateix";
     const status = info.status ? ` (${info.status})` : "";
+    const isOverload = [429, 503, 504].includes(Number(info.status));
     if (limitNoticeText) {
-      limitNoticeText.textContent = `S'ha detectat un limit d'us del backend${status}. Darrera incidència: ${when}.`;
+      limitNoticeText.textContent = isOverload
+        ? `S'ha detectat saturacio del backend per pic de trafic${status}. Darrera incidencia: ${when}.`
+        : `S'ha detectat un limit d'us del backend${status}. Darrera incidencia: ${when}.`;
     }
     if (limitNotice) {
       limitNotice.hidden = false;

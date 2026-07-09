@@ -48,7 +48,7 @@
         min-height: 0;
         overflow-y: auto;
         overflow-x: hidden;
-        padding-bottom: 12px;
+        padding-bottom: 4px;
         scrollbar-width: thin;
         scrollbar-color: rgba(31, 95, 62, 0.18) transparent;
       }
@@ -105,6 +105,7 @@
       /* ── Seccions ─────────────────────────────────────────── */
       .insp-section { padding: 10px 16px; }
       .insp-section.pt-0 { padding-top: 0; }
+      .insp-section.pb-tight { padding-bottom: 4px; }
 
       /* ── Toggle activació ───────────────────────────────────── */
       .insp-toggle {
@@ -371,7 +372,9 @@
 
       /* ── Peu ──────────────────────────────────────────────── */
       .insp-footer {
-        padding: 8px 16px 12px;
+        margin: 2px 16px 0;
+        padding: 8px 0 4px;
+        border-top: 1px solid var(--insp-cream-edge);
         text-align: center;
         font-size: 11px;
         color: #6a7470;
@@ -441,10 +444,6 @@
               <p class="insp-hint">
                 Backend fixat a la VM d'Inspecciona: https://corrector.34.118.197.141.nip.io
               </p>
-              <label class="insp-check" style="margin-top:8px;">
-                <input type="checkbox" id="autoOpenDonationOnLimit" />
-                <span>Obre Aixeta automàticament quan es detecti límit d'ús</span>
-              </label>
             </div>
           </details>
         </section>
@@ -554,7 +553,7 @@
         </section>
 
         <!-- Mecenes -->
-        <section class="insp-section pt-0">
+        <section class="insp-section pt-0 pb-tight">
           <div class="insp-mecenes">
             <p>
               L'Inspecciona és gratuïta, però el servei depèn de cobrir costos d'infraestructura. Si t'és útil, les aportacions voluntàries ajuden a mantenir-la operativa.
@@ -567,6 +566,7 @@
 
         <footer class="insp-footer">
           Fet per <a id="author" href="https://frolesti.cat" target="_blank" rel="noopener noreferrer">frolesti</a>
+          <span id="extensionVersion" style="display:block; margin-top:4px;"></span>
         </footer>
       </div>
     </div>
