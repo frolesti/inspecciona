@@ -6,3 +6,4 @@ backend/
 local-backend/data/
 .env
 .env.vm
+*.mp4

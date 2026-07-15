@@ -369,6 +369,28 @@
         position: relative;
         top: 1px;
       }
+      .insp-report {
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        max-width: 100%;
+        background: #fff;
+        color: var(--insp-green);
+        border: 1px solid var(--insp-cream-edge);
+        font-weight: 600;
+        font-size: 12px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        text-decoration: none;
+        transition: background 120ms ease, border-color 120ms ease;
+      }
+      .insp-report:hover {
+        background: #f9f5e8;
+        border-color: #dcc89a;
+        color: var(--insp-green-dark);
+      }
 
       /* ── Peu ──────────────────────────────────────────────── */
       .insp-footer {
@@ -421,6 +443,9 @@
             <li class="grammar">- Qüestions gramaticals o tipogràfiques</li>
             <li class="style">- Recomanacions d'estil</li>
           </ul>
+          <p style="margin-top:8px; font-size:11px; color:var(--insp-ink-soft);">
+            Fem servir els serveis de <a href="https://www.softcatala.org/" target="_blank" rel="noopener noreferrer">Softcatala</a> per a les correccions.
+          </p>
           <em>Els resultats són orientatius i en cap cas substitueixen una revisió experta.</em>
         </div>
 
@@ -432,18 +457,6 @@
               <label class="insp-check"><input type="radio" name="variant" value="general" /> Centrals</label>
               <label class="insp-check"><input type="radio" name="variant" value="valencia" /> Valencianes</label>
               <label class="insp-check"><input type="radio" name="variant" value="balear" /> Balears</label>
-            </div>
-          </details>
-        </section>
-
-        <!-- Backend -->
-        <section class="insp-section pt-0">
-          <details class="insp-details">
-            <summary>Servidor</summary>
-            <div class="insp-details-body">
-              <p class="insp-hint">
-                Backend fixat a la VM d'Inspecciona: https://corrector.34.118.197.141.nip.io
-              </p>
             </div>
           </details>
         </section>
@@ -560,6 +573,12 @@
             </p>
             <a id="aixeta" class="insp-aixeta" href="https://frolesti.aixeta.cat/" target="_blank" rel="noopener noreferrer">
               <span>Dona'm suport a </span><img src="../../assets/aixeta-logo.png" alt="Aixeta" />
+            </a>
+            <a
+              class="insp-report"
+              href="mailto:frolesti4@gmail.com?subject=Inspecciona%20-%20Informe%20d%27error&body=Explica%20que%20ha%20passat%2C%20a%20quina%20web%20i%20si%20pots%20adjunta%20una%20captura.%0A%0AVersio%20de%20l%27extensio%3A"
+            >
+              Reporta un error per correu
             </a>
           </div>
         </section>

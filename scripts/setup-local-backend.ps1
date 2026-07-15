@@ -9,7 +9,7 @@ $sinonimsPath = Join-Path $backendRoot "sinonims-cat"
 New-Item -ItemType Directory -Force -Path $backendRoot | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $WorkspaceRoot "local-backend\data") | Out-Null
 
-function Ensure-Repo {
+function Update-Repo {
   param(
     [string]$Path,
     [string]$Url
@@ -29,8 +29,8 @@ function Ensure-Repo {
   git clone --depth 1 --single-branch --filter=blob:none $Url $Path
 }
 
-Ensure-Repo -Path $languageToolPath -Url "https://github.com/languagetool-org/languagetool.git"
-Ensure-Repo -Path $sinonimsPath -Url "https://github.com/Softcatala/sinonims-cat.git"
+Update-Repo -Path $languageToolPath -Url "https://github.com/languagetool-org/languagetool.git"
+Update-Repo -Path $sinonimsPath -Url "https://github.com/Softcatala/sinonims-cat.git"
 
 Write-Host "Repos clonats o actualitzats a:"
 Write-Host "- $languageToolPath"

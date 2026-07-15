@@ -64,6 +64,7 @@ if (-not $existingChannel) {
 
 $duration = "${DurationSeconds}s"
 $policyDisplayName = "inspecciona-vm-cpu-high"
+$cpuMetricFilter = 'metric.type="compute.googleapis.com/instance/cpu/utilization" AND resource.type="gce_instance" AND resource.label.instance_id="{0}"' -f $instanceId
 
 $existingPolicy = $null
 $policiesJson = Invoke-Gcloud -Command "gcloud monitoring policies list --format=json"
@@ -99,7 +100,7 @@ $cpuPolicy = @{
 		@{
 			displayName = "CPU utilization > $CpuThreshold for ${DurationSeconds}s"
 			conditionThreshold = @{
-				filter = "metric.type=\"compute.googleapis.com/instance/cpu/utilization\" AND resource.type=\"gce_instance\" AND resource.label.instance_id=\"$instanceId\""
+				filter = $cpuMetricFilter
 				comparison = "COMPARISON_GT"
 				thresholdValue = $CpuThreshold
 				duration = $duration
