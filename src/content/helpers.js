@@ -1,61 +1,4 @@
 (function () {
-  function isEditableTarget(target) {
-    if (!target) return null;
-
-    if (target instanceof HTMLTextAreaElement) return target;
-
-    if (target instanceof HTMLInputElement) {
-      const type = (target.type || "text").toLowerCase();
-      return ["text", "search", "email", "url"].includes(type) ? target : null;
-    }
-
-    const element = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;
-    if (!element || !element.closest) return null;
-
-    const editable = element.closest("[contenteditable]");
-    if (editable) {
-      const mode = String(editable.getAttribute("contenteditable") || "").toLowerCase();
-      if (mode !== "false") return editable;
-    }
-
-    if (element instanceof HTMLElement && element.isContentEditable) {
-      return element;
-    }
-
-    return null;
-  }
-
-  function extractText(target) {
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-      return target.value || "";
-    }
-    return target.innerText || target.textContent || "";
-  }
-
-  function setText(target, text) {
-    try {
-      target.focus();
-
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-        target.value = text;
-      } else {
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(target);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        document.execCommand("insertText", false, text);
-      }
-
-      target.dispatchEvent(new Event("input", { bubbles: true }));
-      target.dispatchEvent(new Event("change", { bubbles: true }));
-    } catch (error) {
-      // L'editor pot rebutjar la inserció (alguns editors rics interfereixen).
-      // Fallem silenciosament per no trencar la pàgina.
-      console.warn("[Inspecciona] No s'ha pogut escriure al camp:", error?.message || error);
-    }
-  }
-
   function isExtensionAlive() {
     try {
       return Boolean(chrome?.runtime?.id);
@@ -98,22 +41,14 @@
     return words;
   }
 
-  function isSingleWord(text) {
-    return /^\p{L}[\p{L}'’\-]*$/u.test(String(text || "").trim());
-  }
-
   function replaceTextSlice(text, offset, length, replacement) {
     return text.slice(0, offset) + replacement + text.slice(offset + length);
   }
 
   window.InspeccionaHelpers = {
-    isEditableTarget,
-    extractText,
-    setText,
     sendMessage,
     isExtensionAlive,
     uniqueSynonymWords,
-    isSingleWord,
     replaceTextSlice
   };
 })();

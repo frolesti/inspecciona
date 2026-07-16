@@ -167,7 +167,47 @@
   overscroll-behavior: contain;
 }
 
-/* Permet l'scroll dins del panell sense que es comuniqui amb la pàgina. */
+/* ── Barres de scroll amb l'estil de l'extensió ──────────────── */
+/* Firefox */
+.insp-panel-body,
+.insp-preview {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(31, 95, 62, 0.45) transparent;
+}
+
+/* WebKit (Chrome/Edge/Brave/Opera) — només dins de la nostra UI */
+.insp-root ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.insp-root ::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+.insp-root ::-webkit-scrollbar-thumb {
+  background: rgba(31, 95, 62, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.insp-root ::-webkit-scrollbar-thumb:hover {
+  background: rgba(31, 95, 62, 0.6);
+  background-clip: padding-box;
+}
+
+/* Amaga les fletxes/botons natius de la barra de scroll. */
+.insp-root ::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.insp-root ::-webkit-scrollbar-corner {
+  background: transparent;
+}
 
 /* ── Vista prèvia ────────────────────────────────────────────── */
 .insp-preview {
@@ -179,9 +219,10 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 13px;
+  line-height: 1.5;
   color: var(--insp-ink);
-  height: 200px;
-  min-height: 200px;
+  min-height: 2.5em;
+  max-height: 160px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }

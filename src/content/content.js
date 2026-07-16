@@ -99,9 +99,7 @@
         return;
       }
       state.selection = next;
-      if (!isPanelOpen()) {
-        showToolbar(next.rect, H.isSingleWord(next.text));
-      }
+      if (!isPanelOpen()) showToolbar(next.rect, next.isSingleWord);
     }, 0);
   }
 
@@ -196,6 +194,17 @@
     root.append(toolbar, panel);
     document.documentElement.appendChild(root);
 
+    // CRÍTIC: cap dels nostres controls no ha de robar el focus al camp
+    // editable. Si el focus surt del contenteditable, editors rics com
+    // DraftJS (X/Twitter) marquen internament la selecció com a col·lapsada
+    // i qualsevol execCommand posterior insereix sense esborrar el text
+    // original → duplicacions. Amb preventDefault al mousedown, el botó
+    // rep el 'click' però el focus queda al camp de text de l'usuari.
+    root.addEventListener("mousedown", (event) => {
+      const btn = event.target.closest("button, .insp-chip");
+      if (btn) event.preventDefault();
+    });
+
     state.root = root;
     state.toolbar = toolbar;
     state.toolbarButtons = { correct: btnCorrect, synonyms: btnSynonyms, variant: btnVariant };
@@ -265,7 +274,6 @@
   }
 
   function closePanel() {
-    unwrapAnchor();
     state.panel?.classList.remove("is-open");
   }
 
@@ -443,8 +451,20 @@
     if (!mark) return;
     mark.classList.toggle("is-hover", on);
     row?.classList.toggle("is-hover", on);
-    if (on) {
-      mark.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (on) scrollMarkIntoPreview(mark);
+  }
+
+  function scrollMarkIntoPreview(mark) {
+    const preview = state.panelPreview;
+    if (!preview) return;
+    const markRect = mark.getBoundingClientRect();
+    const boxRect = preview.getBoundingClientRect();
+    // Fem l'scroll només dins del propi contenidor de la vista prèvia,
+    // sense propagar-lo al panell ni a la pàgina.
+    if (markRect.top < boxRect.top) {
+      preview.scrollTop -= (boxRect.top - markRect.top) + 4;
+    } else if (markRect.bottom > boxRect.bottom) {
+      preview.scrollTop += (markRect.bottom - boxRect.bottom) + 4;
     }
   }
 
@@ -555,32 +575,86 @@
   function applySingleReplacement(offset, length, replacement) {
     if (!state.selection?.target) return;
 
-    // Si la fila de suggeriments és antiga (per una revisió prèvia),
-    // ignorem l'acció per evitar corrupció del text seleccionat.
-    if (!Number.isInteger(offset) || !Number.isInteger(length) || length <= 0) {
+    // Validem que l'incidència encara encaixa dins del text actual.
+    if (!Number.isInteger(offset) || !Number.isInteger(length) || length <= 0 ||
+        offset < 0 || (offset + length) > state.workingText.length) {
       setStatus("S'ha desactualitzat la revisió. Tornant a calcular…", "warn");
       runCheck();
       return;
     }
 
-    if (offset < 0 || (offset + length) > state.workingText.length) {
+    if (state.selection.kind === "text-control") {
+      replaceInTextControl(offset, length, replacement);
+      state.workingText = H.replaceTextSlice(state.workingText, offset, length, replacement);
+      state.selection.end = state.selection.start + state.workingText.length;
+      setStatus("Revisant…", "loading");
+      runCheck();
+      return;
+    }
+
+    // Reduïm l'edició al fragment que realment canvia (prefix/sufix comuns).
+    // Això és CLAU a X/Twitter: correccions com «però» → «, però» comparteixen
+    // el sufix «però». Sense minimitzar, el rang inclouria l'espai anterior
+    // (que pertany al node de la menció @usuari) i creuaria la frontera de
+    // l'entitat de DraftJS, que aleshores insereix sense esborrar → duplica
+    // («, però però»). Amb la minimització sovint queda una simple inserció.
+    const matched = state.workingText.slice(offset, offset + length);
+    const min = minimizeEdit(matched, replacement);
+    const effOffset = offset + min.deltaStart;
+    const effLength = min.deltaLen;
+    const effReplacement = min.insert;
+
+    const target = state.selection.target;
+    const segments = state.selection.segments || [];
+    const segStart = segmentAtTextOffset(segments, effOffset);
+    const segEnd = segmentAtTextOffset(segments, effOffset + effLength);
+    if (!segStart || !segEnd) {
       setStatus("S'ha desactualitzat la revisió. Tornant a calcular…", "warn");
       runCheck();
       return;
     }
 
-    state.workingText = H.replaceTextSlice(state.workingText, offset, length, replacement);
+    const absStart = segStart.nodeStart + (effOffset - segStart.textStart);
+    const absEnd = segEnd.nodeStart + (effOffset + effLength - segEnd.textStart);
+    const regionStart = segments[0].nodeStart;
+    const oldNodeLen = segments.reduce((sum, s) => sum + s.len, 0);
+    const newNodeLen = oldNodeLen - (absEnd - absStart) + effReplacement.length;
+    const modelText = H.replaceTextSlice(state.workingText, offset, length, replacement);
 
-    applyWorkingTextToSelection();
-    // No buidem la llista actual: la deixem fins que arribin els nous
-    // resultats per evitar el parpelleig entre l'aplicació i la revisió.
-    setStatus("Revisant…", "loading");
-    runCheck();
+    replaceInContentEditable(absStart, absEnd, effReplacement, (ok) => {
+      if (!ok) {
+        setStatus("L'editor no permet la inserció automàtica.", "warn");
+        return;
+      }
+
+      // Re-seleccionem la regió editada (en espai de text de nodes, estable
+      // davant reflows de l'editor) i re-llegim l'estat REAL del DOM per no
+      // acumular cap deriva d'offsets.
+      const region = buildRangeFromOffsets(target, regionStart, regionStart + newNodeLen);
+      if (region) {
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(region);
+
+        const fresh = readEditableSelection(target);
+        if (fresh) {
+          state.selection = fresh;
+          state.workingText = fresh.text;
+        } else {
+          state.workingText = modelText;
+        }
+      } else {
+        state.workingText = modelText;
+      }
+
+      setStatus("Revisant…", "loading");
+      runCheck();
+    });
   }
 
   /* ── Sinònims ───────────────────────────────────────────────────────── */
   async function openSynonymsPanel() {
-    if (!state.selection?.text || !H.isSingleWord(state.selection.text)) return;
+    if (!state.selection?.text) return;
 
     openPanel(`Sinònims de «${state.selection.text}»`, state.selection.rect);
     setStatus("Cercant…", "loading");
@@ -626,70 +700,220 @@
   function replaceSelectionWithWord(word) {
     if (!state.selection?.target) return;
 
-    state.workingText = word;
-    state.selection.text = state.workingText;
-    applyWorkingTextToSelection();
+    if (state.selection.kind === "text-control") {
+      replaceInTextControl(0, state.selection.text.length, word);
+    } else {
+      const segments = state.selection.segments || [];
+      if (segments.length) {
+        const absStart = segments[0].nodeStart;
+        const last = segments[segments.length - 1];
+        replaceInContentEditable(absStart, last.nodeStart + last.len, word);
+      }
+    }
 
     closePanel();
     hideToolbar();
   }
 
-  function applyWorkingTextToSelection() {
-    if (!state.selection?.target) return;
+  /* ── Reemplaçament de text ──────────────────────────────────────────── */
+  function replaceInTextControl(offset, length, replacement) {
+    const input = state.selection.target;
+    const absStart = state.selection.start + offset;
+    const value = input.value;
+    const next = value.slice(0, absStart) + replacement + value.slice(absStart + length);
 
-    if (state.selection.kind === "text-control") {
-      const input = state.selection.target;
-      const full = input.value;
-      const start = state.selection.start;
-      const end = state.selection.end;
+    const setter = Object.getOwnPropertyDescriptor(
+      input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+      "value"
+    )?.set;
+    if (setter) setter.call(input, next); else input.value = next;
 
-      const next = full.slice(0, start) + state.workingText + full.slice(end);
-      input.value = next;
-      input.selectionStart = start;
-      input.selectionEnd = start + state.workingText.length;
+    const caret = absStart + replacement.length;
+    input.selectionStart = caret;
+    input.selectionEnd = caret;
 
-      state.selection.end = input.selectionEnd;
+    input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: replacement }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
 
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
+  function replaceInContentEditable(absStart, absEnd, replacement, onDone) {
+    const target = state.selection.target;
+    if (!target || !target.isConnected) {
+      setStatus("La selecció ja no és vàlida. Torna a seleccionar el fragment.", "warn");
       return;
     }
 
-    const target = state.selection.target;
-
-    // Estratègia per contenteditable: substituïm la selecció inicial per un
-    // <span data-insp-anchor> i, a partir d'aquí, cada nova correcció només
-    // actualitza el textContent del span. És robust davant de qualsevol
-    // mutació del DOM que faci l'editor (Gmail, etc.).
-    if (state.selection.anchor && state.selection.anchor.isConnected) {
-      state.selection.anchor.textContent = state.workingText;
-    } else {
-      const range = state.selection.range;
-      if (!range || !range.startContainer?.isConnected) {
-        setStatus("La selecció ja no és vàlida. Torna a seleccionar el fragment.", "warn");
-        return;
-      }
-      range.deleteContents();
-      const span = document.createElement("span");
-      span.setAttribute("data-insp-anchor", "");
-      span.style.whiteSpace = "pre-wrap";
-      span.textContent = state.workingText;
-      range.insertNode(span);
-      state.selection.anchor = span;
+    const domRange = buildRangeFromOffsets(target, absStart, absEnd);
+    if (!domRange) {
+      setStatus("No s'ha pogut localitzar el text a substituir.", "warn");
+      return;
     }
 
-    target.dispatchEvent(new Event("input", { bubbles: true }));
-    target.dispatchEvent(new Event("change", { bubbles: true }));
+    target.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+    selection.addRange(domRange);
+
+    // Deixem que l'editor (DraftJS/React a X, ProseMirror...) sincronitzi la
+    // seva selecció interna a partir de l'esdeveniment 'selectionchange'
+    // ABANS d'inserir. Si inserim al mateix tick, alguns editors encara tenen
+    // la selecció col·lapsada i afegeixen el text sense esborrar l'original
+    // → duplicació. Un tick de marge ho resol.
+    window.setTimeout(() => {
+      let ok = false;
+      try {
+        ok = document.execCommand("insertText", false, replacement);
+      } catch (error) {
+        console.warn("[Inspecciona] insertText ha fallat:", error?.message || error);
+      }
+      if (onDone) onDone(ok);
+    }, 0);
   }
 
-  function unwrapAnchor() {
-    const anchor = state.selection?.anchor;
-    if (!anchor) return;
-    if (anchor.isConnected) {
-      const textNode = document.createTextNode(anchor.textContent || "");
-      anchor.replaceWith(textNode);
+  // Construeix un Range del DOM que cobreix [absStart, absEnd) en l'espai de
+  // text de nodes de l'element editable (suma de nodeValue, SENSE salts de
+  // línia sintètics). Aquest espai és consistent amb el que fem servir per
+  // localitzar les correccions, i evita la deriva que provocava barrejar
+  // Selection.toString() (amb salts) i Range.toString() (sense).
+  //
+  // IMPORTANT sobre les fronteres de node: quan una paraula comença just a
+  // l'inici d'un paràgraf, el seu offset coincideix amb el FINAL del node del
+  // paràgraf anterior (són adjacents en espai de text de nodes). Per a l'INICI
+  // del rang preferim el node SEGÜENT (comparació estricta amb nodeEnd), i per
+  // al FINAL el node ACTUAL. Així el rang no creua mai la frontera de blocs,
+  // cosa que faria que insertText fusionés els paràgrafs.
+  function buildRangeFromOffsets(root, absStart, absEnd) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let node;
+    let pos = 0;
+    let lastNode = null;
+    let startSet = false;
+
+    while ((node = walker.nextNode())) {
+      const nodeStart = pos;
+      const nodeEnd = pos + node.nodeValue.length;
+
+      if (!startSet && absStart >= nodeStart && absStart < nodeEnd) {
+        range.setStart(node, absStart - nodeStart);
+        startSet = true;
+      }
+      if (startSet && absEnd >= nodeStart && absEnd <= nodeEnd) {
+        range.setEnd(node, absEnd - nodeStart);
+        return range;
+      }
+
+      lastNode = node;
+      pos = nodeEnd;
     }
-    state.selection.anchor = null;
+
+    // Posicions que cauen exactament al final absolut del text.
+    if (lastNode) {
+      const end = lastNode.nodeValue.length;
+      if (!startSet) range.setStart(lastNode, end);
+      range.setEnd(lastNode, end);
+      return range;
+    }
+
+    return null;
+  }
+
+  // Recull els fragments de text seleccionats dins d'un contenteditable.
+  // Retorna { text, segments }, on `text` és el text de treball (amb salts de
+  // línia entre blocs per llegibilitat i qualitat del corrector) i `segments`
+  // mapeja cada tros a la seva posició al DOM:
+  //   { node, nodeOffset, nodeStart, textStart, len }
+  //   - nodeStart: offset absolut en espai de text de nodes (sense salts).
+  //   - textStart: offset dins de `text` (amb salts).
+  function collectSelectionSegments(editable, range) {
+    const segments = [];
+    let text = "";
+    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    let node;
+    let absPos = 0;
+    let prevBlock = null;
+    let first = true;
+
+    while ((node = walker.nextNode())) {
+      const len = node.nodeValue.length;
+      if (range.intersectsNode(node)) {
+        let s = 0;
+        let e = len;
+        if (node === range.startContainer) s = range.startOffset;
+        if (node === range.endContainer) e = range.endOffset;
+
+        if (e > s) {
+          const slice = node.nodeValue.slice(s, e);
+          const block = nearestBlock(node, editable);
+          if (!first && block !== prevBlock) text += "\n";
+
+          segments.push({
+            node,
+            nodeOffset: s,
+            nodeStart: absPos + s,
+            textStart: text.length,
+            len: slice.length
+          });
+          text += slice;
+          prevBlock = block;
+          first = false;
+        }
+      }
+      absPos += len;
+    }
+
+    return { text, segments };
+  }
+
+  function nearestBlock(node, editable) {
+    let el = node.parentElement;
+    while (el && el !== editable) {
+      const tag = el.tagName;
+      if (tag === "DIV" || tag === "P" || tag === "LI" ||
+          tag === "SECTION" || tag === "ARTICLE" || tag === "BLOCKQUOTE") {
+        return el;
+      }
+      el = el.parentElement;
+    }
+    return editable;
+  }
+
+  function segmentAtTextOffset(segments, textOffset) {
+    for (const seg of segments) {
+      if (textOffset >= seg.textStart && textOffset <= seg.textStart + seg.len) {
+        return seg;
+      }
+    }
+    return null;
+  }
+
+  // Redueix una substitució al fragment mínim que canvia realment, traient el
+  // prefix i el sufix comuns entre el text original i el reemplaçament.
+  // Retorna { deltaStart, deltaLen, insert }:
+  //   - deltaStart: quants caràcters del principi es mantenen igual.
+  //   - deltaLen: quants caràcters (després del prefix) cal esborrar.
+  //   - insert: text a inserir en aquell punt.
+  function minimizeEdit(matched, replacement) {
+    matched = String(matched ?? "");
+    replacement = String(replacement ?? "");
+
+    let start = 0;
+    const maxPrefix = Math.min(matched.length, replacement.length);
+    while (start < maxPrefix && matched[start] === replacement[start]) start++;
+
+    let endM = matched.length;
+    let endR = replacement.length;
+    while (endM > start && endR > start && matched[endM - 1] === replacement[endR - 1]) {
+      endM--;
+      endR--;
+    }
+
+    return {
+      deltaStart: start,
+      deltaLen: endM - start,
+      insert: replacement.slice(start, endR)
+    };
   }
 
   /* ── Varietat dialectal ─────────────────────────────────────────────── */
@@ -756,12 +980,13 @@
   }
 
   function readEditableSelection(eventTarget) {
-    const editable = H.isEditableTarget(eventTarget) || H.isEditableTarget(document.activeElement);
+    const editable = findEditable(eventTarget) || findEditable(document.activeElement);
     if (!editable) return null;
 
+    // <input> / <textarea>
     if (editable instanceof HTMLInputElement || editable instanceof HTMLTextAreaElement) {
       const start = editable.selectionStart ?? 0;
-      const end   = editable.selectionEnd ?? 0;
+      const end = editable.selectionEnd ?? 0;
       if (end <= start) return null;
 
       const text = editable.value.slice(start, end);
@@ -769,24 +994,24 @@
 
       return {
         kind: "text-control",
+        target: editable,
         text,
         start,
         end,
         rect: editable.getBoundingClientRect(),
-        target: editable
+        isSingleWord: isSingleWord(text)
       };
     }
 
+    // contenteditable
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
-
-    const text = selection.toString();
-    if (!text.trim()) return null;
-
-    const anchorEditable = H.isEditableTarget(selection.anchorNode);
-    if (anchorEditable !== editable) return null;
+    if (findEditable(selection.anchorNode) !== editable) return null;
 
     const range = selection.getRangeAt(0);
+    const { text, segments } = collectSelectionSegments(editable, range);
+    if (!text.trim() || segments.length === 0) return null;
+
     let rect = range.getBoundingClientRect();
     if ((!rect || rect.width === 0) && range.getClientRects().length > 0) {
       rect = range.getClientRects()[0];
@@ -795,11 +1020,36 @@
 
     return {
       kind: "contenteditable",
+      target: editable,
       text,
-      range: range.cloneRange(),
+      segments,
       rect,
-      target: editable
+      isSingleWord: isSingleWord(text)
     };
+  }
+
+  function findEditable(node) {
+    if (!node) return null;
+    const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    if (!element) return null;
+
+    if (element instanceof HTMLTextAreaElement) return element;
+    if (element instanceof HTMLInputElement) {
+      const type = (element.type || "text").toLowerCase();
+      return ["text", "search", "email", "url"].includes(type) ? element : null;
+    }
+
+    const editable = element.closest?.("[contenteditable]");
+    if (editable && String(editable.getAttribute("contenteditable")).toLowerCase() !== "false") {
+      return editable;
+    }
+    if (element instanceof HTMLElement && element.isContentEditable) return element;
+
+    return null;
+  }
+
+  function isSingleWord(text) {
+    return /^\p{L}[\p{L}'’\-]*$/u.test(String(text || "").trim());
   }
 
   /* ── Drag del panell ────────────────────────────────────────────────── */
