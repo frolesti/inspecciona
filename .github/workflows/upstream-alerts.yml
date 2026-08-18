@@ -1,0 +1,45 @@
+name: upstream-version-alerts
+
+"on":
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  check-upstream-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check upstream versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REPOS: Softcatala/catalan-dict-tools,Softcatala/diccionari-multilingue,Softcatala/diccionari-angles-catala
+          UPSTREAM_STATE_PATH: .github/upstream/versions-state.json
+          ALERT_EMAIL_TO: frolesti4@gmail.com
+        run: node scripts/check-upstream-commits.mjs
+
+      - name: Commit upstream state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- .github/upstream/versions-state.json; then
+            echo "No upstream state changes"
+          else
+            git add .github/upstream/versions-state.json
+            git commit -m "chore: update upstream version state"
+            git push
+          fi

@@ -4,9 +4,9 @@
 
   /* ── Icones SVG (inline, una sola línia per facilitat de manteniment) ── */
   const ICONS = {
-    correct: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
     synonyms: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M7 7h10v10"/></svg>',
-    variant: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+    dictionary: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a3 3 0 0 1 3-3h5v17H6a3 3 0 0 0-3 3V6Z"/><path d="M21 6a3 3 0 0 0-3-3h-5v17h5a3 3 0 0 1 3 3V6Z"/><path d="M11 5a2 2 0 0 0-2-2"/><path d="M13 5a2 2 0 0 1 2-2"/></svg>',
+    settings: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1-.33H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-.06-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6c.36 0 .7-.12 1-.33.27-.2.46-.5.53-.84V3a2 2 0 1 1 4 0v.09c.07.34.26.64.53.84.3.21.64.33 1 .33a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.46.46-.6 1.14-.33 1.82.1.25.25.47.44.65.19.18.42.33.68.43H21a2 2 0 1 1 0 4h-.09c-.26.1-.49.25-.68.43-.19.18-.34.4-.44.65Z"/></svg>',
     close: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>'
   };
 
@@ -45,7 +45,40 @@
     panelActions: null,
     panelResults: null,
     panelDragged: false,
-    drag: null
+    drag: null,
+    inlineMarker: null,
+    inlineMarkerTooltip: null,
+    inlineLiveLayer: null,
+    inlineLiveMatches: [],
+    inlinePopup: null,
+    inlineIgnored: new Set(),
+    inlineReviewTimer: null,
+    inlinePopupTimer: null,
+    inlineReviewSeq: 0
+  };
+
+  const LIVE_INPUT_DEBOUNCE_MS = 480;
+  const LIVE_SELECTION_DEBOUNCE_MS = 360;
+
+  const inlineUtils = window.InspeccionaInlineUtils || {
+    classifyMatchKind: (match) => {
+      const catId = (match?.rule?.category?.id || "").toUpperCase();
+      const issue = (match?.rule?.issueType || "").toLowerCase();
+      const ruleId = (match?.rule?.id || "").toUpperCase();
+
+      if (catId === "TYPOS" || ruleId.startsWith("MORFOLOGIK") || issue === "misspelling") {
+        return "typo";
+      }
+      if (catId === "STYLE" || catId === "REDUNDANCY" || catId === "COLLOCATIONS" || issue === "style") {
+        return "style";
+      }
+      return "grammar";
+    },
+    getMarkerStyles: (kind) => ({
+      typo: { color: "#c0392b", label: "Ortografia" },
+      grammar: { color: "#2c5d8a", label: "Gramàtica" },
+      style: { color: "#1f5f3e", label: "Estil" }
+    }[kind] || { color: "#2c5d8a", label: "Gramàtica" })
   };
 
   init();
@@ -84,6 +117,12 @@
     document.addEventListener("mouseup", onMouseUp, true);
     document.addEventListener("mousedown", onPointerDown, true);
     document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("selectionchange", onSelectionChange, true);
+    document.addEventListener("input", onInputChange, true);
+    document.addEventListener("keyup", onInputChange, true);
+    document.addEventListener("paste", onInputChange, true);
+    document.addEventListener("cut", onInputChange, true);
+    document.addEventListener("compositionend", onInputChange, true);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onResize);
   }
@@ -95,11 +134,13 @@
     window.setTimeout(() => {
       const next = readEditableSelection(event.target);
       if (!next) {
+        hideInlineMarker();
         if (!isPanelOpen()) hideToolbar();
         return;
       }
       state.selection = next;
-      if (!isPanelOpen()) showToolbar(next.rect, next.isSingleWord);
+      if (!isPanelOpen()) showToolbar(next.rect);
+      runInlineReview(next);
     }, 0);
   }
 
@@ -108,6 +149,7 @@
     if (isInsideUi(event.target)) return;
     hideToolbar();
     closePanel();
+    hideInlineReview();
   }
 
   function onKeyDown(event) {
@@ -115,7 +157,44 @@
     if (event.key === "Escape") {
       hideToolbar();
       closePanel();
+      hideInlineReview();
     }
+  }
+
+  function onSelectionChange() {
+    if (!state.enabled) return;
+    if (state.inlineReviewTimer) window.clearTimeout(state.inlineReviewTimer);
+    state.inlineReviewTimer = window.setTimeout(() => {
+      const next = readEditableSnapshot(document.activeElement);
+      if (!next) {
+        hideInlineMarker();
+        return;
+      }
+      state.selection = next;
+      if (next.kind === "contenteditable") {
+        runInlineReview(next, { live: true });
+      }
+    }, LIVE_SELECTION_DEBOUNCE_MS);
+  }
+
+  function onInputChange(event) {
+    if (!state.enabled) return;
+    if (isInsideUi(event.target)) return;
+    if (state.inlineReviewTimer) window.clearTimeout(state.inlineReviewTimer);
+    state.inlineReviewTimer = window.setTimeout(() => {
+      const next = readEditableSnapshot(event.target);
+      if (!next) {
+        hideInlineReview();
+        return;
+      }
+      if (next.kind !== "contenteditable") {
+        state.selection = next;
+        hideInlineReview();
+        return;
+      }
+      state.selection = next;
+      runInlineReview(next, { live: true });
+    }, LIVE_INPUT_DEBOUNCE_MS);
   }
 
   function onScroll(event) {
@@ -124,11 +203,15 @@
     if (event.target && isInsideUi(event.target)) return;
     // Si l'usuari fa scroll a la pàgina, amaguem el toolbar però mantenim el panell.
     hideToolbar();
+    positionInlineMarker();
+    positionLiveReviewLayer();
+    hideInlinePopup();
   }
 
   function onResize() {
     hideToolbar();
     closePanel();
+    hideInlineReview();
   }
 
   /* ── Construcció UI ─────────────────────────────────────────────────── */
@@ -143,11 +226,11 @@
     toolbar.setAttribute("role", "toolbar");
     toolbar.setAttribute("aria-label", "Inspecciona");
 
-    const btnCorrect  = createIconButton("correct",  ICONS.correct,  "Corregeix");
     const btnSynonyms = createIconButton("synonyms", ICONS.synonyms, "Sinònims");
-    const btnVariant  = createIconButton("variant",  ICONS.variant,  "Varietat dialectal");
+    const btnDictionary = createIconButton("dictionary", ICONS.dictionary, "Diccionari");
+    const btnSettings = createIconButton("settings", ICONS.settings, "Configuració");
 
-    toolbar.append(btnCorrect, btnSynonyms, btnVariant);
+    toolbar.append(btnSynonyms, btnDictionary, btnSettings);
 
     const panel = document.createElement("section");
     panel.className = "insp-panel";
@@ -207,7 +290,7 @@
 
     state.root = root;
     state.toolbar = toolbar;
-    state.toolbarButtons = { correct: btnCorrect, synonyms: btnSynonyms, variant: btnVariant };
+    state.toolbarButtons = { synonyms: btnSynonyms, dictionary: btnDictionary, settings: btnSettings };
     state.panel = panel;
     state.panelTitle = title;
     state.panelPreview = preview;
@@ -215,9 +298,9 @@
     state.panelActions = actions;
     state.panelResults = results;
 
-    btnCorrect.addEventListener("click", openCorrectionPanel);
     btnSynonyms.addEventListener("click", openSynonymsPanel);
-    btnVariant.addEventListener("click", openVariantPanel);
+    btnDictionary.addEventListener("click", openDictionaryPanel);
+    btnSettings.addEventListener("click", openSettingsPage);
 
     header.addEventListener("mousedown", onPanelDragStart);
   }
@@ -234,11 +317,13 @@
   }
 
   /* ── Toolbar ─────────────────────────────────────────────────────────── */
-  function showToolbar(rect, allowSynonyms) {
+  function showToolbar(rect) {
     ensureUi();
     if (!state.toolbar || !rect) return;
 
-    state.toolbarButtons.synonyms.hidden = !allowSynonyms;
+    // Els sinònims han d'estar sempre disponibles, encara que no hi hagi
+    // una selecció d'una sola paraula en aquell instant.
+    state.toolbarButtons.synonyms.hidden = false;
     state.toolbar.classList.add("is-open");
 
     requestAnimationFrame(() => {
@@ -261,6 +346,435 @@
 
   function hideToolbar() {
     state.toolbar?.classList.remove("is-open");
+  }
+
+  function hideInlineMarker() {
+    state.inlineMarker?.remove();
+    state.inlineMarker = null;
+    state.inlineMarkerTooltip?.remove();
+    state.inlineMarkerTooltip = null;
+  }
+
+  function hideInlinePopup() {
+    state.inlinePopup?.remove();
+    state.inlinePopup = null;
+    if (state.inlinePopupTimer) window.clearTimeout(state.inlinePopupTimer);
+    state.inlinePopupTimer = null;
+  }
+
+  function hideInlineReview() {
+    hideInlineMarker();
+    hideInlinePopup();
+    state.inlineLiveLayer?.remove();
+    state.inlineLiveLayer = null;
+    state.inlineLiveMatches = [];
+    if (state.inlinePopupTimer) window.clearTimeout(state.inlinePopupTimer);
+    state.inlinePopupTimer = null;
+  }
+
+  function positionLiveReviewLayer() {
+    if (!state.inlineLiveLayer) return;
+    if (state.selection?.kind !== "contenteditable") return;
+    if (!Array.isArray(state.inlineLiveMatches) || state.inlineLiveMatches.length === 0) return;
+    if (!state.selection?.target || !state.selection.target.isConnected) return;
+
+    const fresh = readContentEditableSnapshot(state.selection.target);
+    if (!fresh || fresh.kind !== "contenteditable") {
+      hideInlineReview();
+      return;
+    }
+
+    state.selection = fresh;
+
+    const hits = Array.from(state.inlineLiveLayer.querySelectorAll(".insp-live-hit"));
+    for (const hit of hits) {
+      const matchIndex = Number.parseInt(hit.dataset.matchIndex || "", 10);
+      const rectIndex = Number.parseInt(hit.dataset.rectIndex || "", 10);
+      const match = state.inlineLiveMatches[matchIndex];
+
+      if (!match || !Number.isInteger(rectIndex) || rectIndex < 0) {
+        hit.style.display = "none";
+        continue;
+      }
+
+      const range = buildLiveRangeFromOffsets(fresh.target, fresh.segments, match.offset, match.length);
+      if (!range) {
+        hit.style.display = "none";
+        continue;
+      }
+
+      const rect = Array.from(range.getClientRects())[rectIndex];
+      if (!rect) {
+        hit.style.display = "none";
+        continue;
+      }
+
+      hit.style.display = "";
+      hit.style.left = `${window.scrollX + rect.left}px`;
+      hit.style.top = `${window.scrollY + rect.top - 4}px`;
+      hit.style.height = `${Math.max(16, rect.height + 8)}px`;
+      hit.style.width = `${Math.max(12, rect.width)}px`;
+    }
+  }
+
+  function positionInlineMarker() {
+    if (!state.inlineMarker || !state.selection?.rect) return;
+
+    const rect = state.selection.rect;
+    const left = window.scrollX + rect.left;
+    const top = window.scrollY + rect.bottom + 8;
+    state.inlineMarker.style.left = `${left}px`;
+    state.inlineMarker.style.top = `${top}px`;
+  }
+
+  async function runInlineReview(selection, options = {}) {
+    if (!selection?.target || !selection.text?.trim()) {
+      hideInlineReview();
+      return;
+    }
+
+    const seq = ++state.inlineReviewSeq;
+    ensureUi();
+    state.workingText = selection.text;
+    const response = await H.sendMessage({
+      type: "inspecciona:check",
+      text: selection.text,
+      variant: state.prefs.variant,
+      prefs: state.prefs
+    });
+
+    if (seq !== state.inlineReviewSeq) return;
+
+    if (!response.ok) {
+      hideInlineReview();
+      return;
+    }
+
+    if (options.live) {
+      renderLiveReview(selection, response.data);
+      return;
+    }
+
+    renderInlineMarker(selection, response.data);
+  }
+
+  function renderLiveReview(selection, data) {
+    hideInlinePopup();
+    state.inlineLiveLayer?.remove();
+
+    const matches = normalizeMatches(data?.matches || []);
+    state.inlineLiveMatches = matches;
+    if (!matches.length) return;
+
+    const firstMatch = matches[0];
+    const firstKind = inlineUtils.classifyMatchKind(firstMatch);
+    const firstSuggestion = getFirstSuggestion(firstMatch);
+    const firstPopupText = buildPopupText(firstMatch, firstKind, firstSuggestion);
+    const firstMatchKey = buildLiveMatchKey(selection.text, firstMatch);
+
+    if (selection.kind !== "contenteditable") {
+      const fallbackLayer = document.createElement("div");
+      fallbackLayer.className = "insp-live-layer";
+      state.inlineLiveLayer = fallbackLayer;
+      state.root.appendChild(fallbackLayer);
+      showInlinePopup(selection.rect, firstPopupText, firstSuggestion, firstKind, firstMatch, firstMatchKey);
+      return;
+    }
+
+    const layer = document.createElement("div");
+    layer.className = "insp-live-layer";
+    state.inlineLiveLayer = layer;
+    state.root.appendChild(layer);
+
+    for (const match of matches.slice(0, 50)) {
+      const matchIndex = matches.indexOf(match);
+      const range = buildLiveRangeFromOffsets(selection.target, selection.segments, match.offset, match.length);
+      if (!range) continue;
+
+      const kind = inlineUtils.classifyMatchKind(match);
+      const suggestion = getFirstSuggestion(match);
+      const popupText = buildPopupText(match, kind, suggestion);
+      const matchKey = buildLiveMatchKey(selection.text, match);
+      const rects = Array.from(range.getClientRects());
+
+      rects.forEach((rect, rectIndex) => {
+        const hit = document.createElement("button");
+        hit.type = "button";
+        hit.className = "insp-live-hit";
+        hit.dataset.kind = kind;
+        hit.dataset.matchKey = matchKey;
+        hit.dataset.matchIndex = String(matchIndex);
+        hit.dataset.rectIndex = String(rectIndex);
+        hit.style.left = `${window.scrollX + rect.left}px`;
+        hit.style.top = `${window.scrollY + rect.top - 4}px`;
+        hit.style.height = `${Math.max(16, rect.height + 8)}px`;
+        hit.style.width = `${Math.max(12, rect.width)}px`;
+
+        const line = document.createElement("span");
+        line.className = "insp-live-hit-line";
+        hit.appendChild(line);
+
+        if (state.inlineIgnored.has(matchKey)) {
+          hit.classList.add("is-ignored");
+        }
+
+        hit.addEventListener("mouseenter", () => {
+          if (state.inlineIgnored.has(matchKey)) return;
+          showInlinePopup(hit, popupText, suggestion, kind, match, matchKey);
+        });
+        hit.addEventListener("mouseleave", scheduleHideInlinePopup);
+        hit.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          showInlinePopup(hit, popupText, suggestion, kind, match, matchKey);
+        });
+
+        layer.appendChild(hit);
+      });
+    }
+  }
+
+  function showInlinePopup(anchor, popupText, suggestion, kind, match, matchKey = "") {
+    hideInlinePopup();
+
+    const popup = document.createElement("div");
+    popup.className = "insp-inline-popup";
+    popup.dataset.kind = kind;
+
+    const title = document.createElement("strong");
+    title.textContent = popupText.title;
+
+    const message = document.createElement("p");
+    message.textContent = popupText.message;
+
+    const correction = document.createElement("p");
+    correction.className = "insp-inline-popup-correction";
+    correction.textContent = popupText.detail;
+
+    const actions = document.createElement("div");
+    actions.className = "insp-inline-popup-actions";
+
+    if (suggestion) {
+      const apply = document.createElement("button");
+      apply.type = "button";
+      apply.className = "insp-btn insp-btn-primary";
+      apply.textContent = "Aplica correcció";
+      apply.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        applySingleReplacement(match.offset, match.length, suggestion);
+        hideInlineReview();
+      });
+      actions.appendChild(apply);
+    }
+
+    const ignore = document.createElement("button");
+    ignore.type = "button";
+    ignore.className = "insp-btn insp-btn-ghost";
+    ignore.textContent = "Ignora";
+    ignore.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (matchKey) addIgnoredLiveMatch(matchKey);
+      hideInlinePopup();
+    });
+    actions.appendChild(ignore);
+
+    popup.append(title, message, correction, actions);
+    state.inlinePopup = popup;
+    state.root.appendChild(popup);
+    popup.addEventListener("mouseenter", () => {
+      if (state.inlinePopupTimer) window.clearTimeout(state.inlinePopupTimer);
+    });
+    popup.addEventListener("mouseleave", scheduleHideInlinePopup);
+
+    const rect = typeof anchor?.getBoundingClientRect === "function" ? anchor.getBoundingClientRect() : anchor;
+    const popupHeight = popup.offsetHeight || 120;
+    let top = window.scrollY + rect.top - popupHeight - 12;
+    if (top < window.scrollY + 8) {
+      top = window.scrollY + rect.bottom + 10;
+    }
+    popup.style.left = `${window.scrollX + rect.left}px`;
+    popup.style.top = `${top}px`;
+  }
+
+  function scheduleHideInlinePopup() {
+    if (state.inlinePopupTimer) window.clearTimeout(state.inlinePopupTimer);
+    state.inlinePopupTimer = window.setTimeout(() => {
+      hideInlinePopup();
+    }, 120);
+  }
+
+  function normalizeMatches(matches) {
+    return (matches || []).filter((match) => Number.isInteger(match.offset) && Number.isInteger(match.length) && match.length > 0);
+  }
+
+  function buildLiveMatchKey(sourceText, match) {
+    const excerpt = String(sourceText || "").slice(match.offset, match.offset + match.length);
+    return `${match.offset}:${match.length}:${excerpt}:${match.message || ""}`;
+  }
+
+  function addIgnoredLiveMatch(matchKey) {
+    if (!matchKey) return;
+    state.inlineIgnored.add(matchKey);
+    if (state.inlineIgnored.size > 250) {
+      const first = state.inlineIgnored.values().next().value;
+      if (first) state.inlineIgnored.delete(first);
+    }
+  }
+
+  function getFirstSuggestion(match) {
+    return match?.replacements?.find((entry) => entry?.value)?.value || "";
+  }
+
+  function buildPopupText(match, kind, suggestion) {
+    const titleMap = {
+      typo: "Error ortogràfic",
+      grammar: "Error gramatical",
+      style: "Suggeriment d'estil"
+    };
+    const title = titleMap[kind] || "Incidència detectada";
+    const rawMessage = match?.message?.trim() || match?.rule?.description?.trim() || "";
+    const normalizedMessage = rawMessage && rawMessage.toLowerCase() !== title.toLowerCase()
+      ? rawMessage
+      : `S'ha detectat un possible ${kind === "typo" ? "error ortogràfic" : kind === "grammar" ? "error gramatical" : "millora d'estil"}.`;
+    const detail = suggestion ? `Correcció recomanada: ${suggestion}` : "No hi ha cap correcció automàtica disponible.";
+    return { title, message: normalizedMessage, detail };
+  }
+
+  function buildLiveRangeFromOffsets(editable, segments, offset, length) {
+    if (!editable || !Array.isArray(segments) || !Number.isInteger(offset) || !Number.isInteger(length) || length <= 0) {
+      return null;
+    }
+
+    const start = segmentAtTextOffset(segments, offset);
+    const end = segmentAtTextOffset(segments, offset + length);
+    if (!start || !end) return null;
+
+    const absStart = start.nodeStart + (offset - start.textStart);
+    const absEnd = end.nodeStart + (offset + length - end.textStart);
+    return buildRangeFromOffsets(editable, absStart, absEnd);
+  }
+
+  function readEditableSnapshot(eventTarget) {
+    const editable = findEditable(eventTarget) || findEditable(document.activeElement);
+    if (!editable) return null;
+
+    if (editable instanceof HTMLInputElement || editable instanceof HTMLTextAreaElement) {
+      const value = editable.value || "";
+      if (!value.trim()) return null;
+      return {
+        kind: "text-control",
+        target: editable,
+        text: value,
+        start: editable.selectionStart ?? 0,
+        end: editable.selectionEnd ?? 0,
+        rect: editable.getBoundingClientRect(),
+        segments: [],
+        isSingleWord: isSingleWord(value)
+      };
+    }
+
+    return readContentEditableSnapshot(editable);
+  }
+
+  function readContentEditableSnapshot(editable) {
+    if (!editable) return null;
+
+    const segments = [];
+    let text = "";
+    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    let node;
+    let nodeStart = 0;
+
+    while ((node = walker.nextNode())) {
+      const value = node.nodeValue || "";
+      if (!value) continue;
+      segments.push({
+        node,
+        nodeOffset: 0,
+        nodeStart,
+        textStart: text.length,
+        len: value.length
+      });
+      text += value;
+      nodeStart += value.length;
+    }
+
+    if (!text.trim() || segments.length === 0) return null;
+
+    return {
+      kind: "contenteditable",
+      target: editable,
+      text,
+      segments,
+      rect: editable.getBoundingClientRect(),
+      isSingleWord: isSingleWord(text)
+    };
+  }
+
+  function renderInlineMarker(selection, data) {
+    hideInlineMarker();
+
+    const matches = (data?.matches || []).filter(
+      (match) => Number.isInteger(match.offset) && Number.isInteger(match.length) && match.length > 0
+    );
+
+    if (!matches.length) return;
+
+    const first = matches[0];
+    const kind = inlineUtils.classifyMatchKind(first);
+    const styles = inlineUtils.getMarkerStyles(kind);
+
+    const marker = document.createElement("div");
+    marker.className = "insp-inline-marker";
+    marker.dataset.kind = kind;
+    marker.style.left = `${window.scrollX + selection.rect.left}px`;
+    marker.style.top = `${window.scrollY + selection.rect.bottom + 8}px`;
+
+    const label = document.createElement("span");
+    label.className = "insp-inline-marker-label";
+    label.textContent = styles.label;
+
+    const tooltip = document.createElement("div");
+    tooltip.className = "insp-inline-marker-tooltip";
+
+    const title = document.createElement("strong");
+    title.textContent = styles.label;
+
+    const hint = document.createElement("span");
+    hint.textContent = first.replacements?.[0]?.value
+      ? `Sugg.: ${first.replacements[0].value}`
+      : "Suggeriment disponible";
+
+    tooltip.append(title, hint);
+
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.className = "insp-inline-marker-action";
+    apply.textContent = "Aplicar";
+    apply.addEventListener("click", (event) => {
+      event.stopPropagation();
+      applySingleReplacement(first.offset, first.length, first.replacements?.[0]?.value || "");
+      hideInlineMarker();
+    });
+
+    tooltip.appendChild(apply);
+    marker.append(label, tooltip);
+    marker.addEventListener("mouseenter", () => marker.classList.add("is-hover"));
+    marker.addEventListener("mouseleave", () => marker.classList.remove("is-hover"));
+    marker.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (first.replacements?.[0]?.value) {
+        applySingleReplacement(first.offset, first.length, first.replacements[0].value);
+      }
+      hideInlineMarker();
+    });
+
+    state.inlineMarker = marker;
+    state.inlineMarkerTooltip = tooltip;
+    state.root.appendChild(marker);
+    positionInlineMarker();
   }
 
   /* ── Panell ─────────────────────────────────────────────────────────── */
@@ -337,15 +851,6 @@
   }
 
   /* ── Corrector ──────────────────────────────────────────────────────── */
-  function openCorrectionPanel() {
-    if (!state.selection?.target) return;
-    state.workingText = state.selection.text;
-    openPanel("Correcció", state.selection.rect);
-    state.panelPreview.textContent = state.workingText;
-    setStatus("Revisant…", "loading");
-    runCheck();
-  }
-
   async function runCheck() {
     const text = (state.workingText || "").trim();
     if (!text) {
@@ -474,17 +979,7 @@
   }
 
   function categorizeMatch(match) {
-    const catId  = (match?.rule?.category?.id  || "").toUpperCase();
-    const issue  = (match?.rule?.issueType     || "").toLowerCase();
-    const ruleId = (match?.rule?.id            || "").toUpperCase();
-
-    if (catId === "TYPOS" || ruleId.startsWith("MORFOLOGIK") || issue === "misspelling") {
-      return "typo";
-    }
-    if (catId === "STYLE" || catId === "REDUNDANCY" || catId === "COLLOCATIONS" || issue === "style") {
-      return "style";
-    }
-    return "grammar";
+    return inlineUtils.classifyMatchKind(match);
   }
 
   function renderPreviewWithMarks(text, matches) {
@@ -654,14 +1149,23 @@
 
   /* ── Sinònims ───────────────────────────────────────────────────────── */
   async function openSynonymsPanel() {
-    if (!state.selection?.text) return;
+    const synonymSelection = resolveSynonymSelection();
+    if (!synonymSelection) {
+      if (state.selection?.rect) {
+        openPanel("Sinònims", state.selection.rect);
+        setStatus("Posa el cursor sobre una paraula per cercar sinònims.", "warn");
+      }
+      return;
+    }
 
-    openPanel(`Sinònims de «${state.selection.text}»`, state.selection.rect);
+    state.selection = synonymSelection;
+
+    openPanel(`Sinònims de «${synonymSelection.text}»`, synonymSelection.rect);
     setStatus("Cercant…", "loading");
 
     const response = await H.sendMessage({
       type: "inspecciona:synonyms",
-      word: state.selection.text
+      word: synonymSelection.text
     });
 
     if (!response.ok) {
@@ -830,6 +1334,8 @@
     const segments = [];
     let text = "";
     const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    const blockOrder = getSelectedBlockOrder(editable, range);
+    const blockIndex = new Map(blockOrder.map((block, idx) => [block, idx]));
     let node;
     let absPos = 0;
     let prevBlock = null;
@@ -846,7 +1352,14 @@
         if (e > s) {
           const slice = node.nodeValue.slice(s, e);
           const block = nearestBlock(node, editable);
-          if (!first && block !== prevBlock) text += "\n";
+          if (!first && block !== prevBlock) {
+            const prevIdx = blockIndex.get(prevBlock);
+            const currIdx = blockIndex.get(block);
+            const gap = Number.isInteger(prevIdx) && Number.isInteger(currIdx)
+              ? Math.max(1, currIdx - prevIdx)
+              : 1;
+            text += "\n".repeat(gap);
+          }
 
           segments.push({
             node,
@@ -877,6 +1390,24 @@
       el = el.parentElement;
     }
     return editable;
+  }
+
+  function getSelectedBlockOrder(editable, range) {
+    const blocks = [];
+    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_ELEMENT);
+    let el;
+    while ((el = walker.nextNode())) {
+      if (!isBlockElement(el)) continue;
+      if (!range.intersectsNode(el)) continue;
+      blocks.push(el);
+    }
+    return blocks;
+  }
+
+  function isBlockElement(el) {
+    const tag = el.tagName;
+    return tag === "DIV" || tag === "P" || tag === "LI" ||
+      tag === "SECTION" || tag === "ARTICLE" || tag === "BLOCKQUOTE";
   }
 
   function segmentAtTextOffset(segments, textOffset) {
@@ -916,62 +1447,65 @@
     };
   }
 
-  /* ── Varietat dialectal ─────────────────────────────────────────────── */
-  function openVariantPanel() {
-    if (!state.selection) return;
-
-    openPanel("Varietat dialectal", state.selection.rect);
-    setStatus("Tria la varietat per a les properes correccions.", "info");
-
-    const options = [
-      { value: "general",  label: "Catalan general (centrals)" },
-      { value: "valencia", label: "Valencianes" },
-      { value: "balear",   label: "Balears" }
-    ];
-
-    const wrap = document.createElement("div");
-    wrap.className = "insp-options";
-
-    for (const option of options) {
-      const id = `insp-variant-${option.value}`;
-      const row = document.createElement("label");
-      row.className = "insp-option";
-      row.htmlFor = id;
-
-      const input = document.createElement("input");
-      input.type = "radio";
-      input.name = "insp-variant";
-      input.id = id;
-      input.value = option.value;
-      input.checked = state.prefs.variant === option.value;
-
-      const text = document.createElement("span");
-      text.textContent = option.label;
-
-      row.append(input, text);
-      wrap.appendChild(row);
+  /* ── Diccionari ───────────────────────────────────────────────────── */
+  async function openDictionaryPanel() {
+    const dictionarySelection = resolveDictionarySelection();
+    if (!dictionarySelection) {
+      if (state.selection?.rect) {
+        openPanel("Diccionari", state.selection.rect);
+        setStatus("Posa el cursor sobre una paraula per consultar el diccionari.", "warn");
+      }
+      return;
     }
 
-    state.panelResults.replaceChildren(wrap);
+    state.selection = dictionarySelection;
 
-    const save = document.createElement("button");
-    save.type = "button";
-    save.className = "insp-btn insp-btn-primary";
-    save.textContent = "Desa varietat";
-    save.addEventListener("click", () => {
-      const value = wrap.querySelector('input[name="insp-variant"]:checked')?.value;
-      if (!value) {
-        setStatus("Tria una varietat.", "warn");
-        return;
-      }
-      chrome.storage.sync.set({ variant: value }, () => {
-        state.prefs.variant = value;
-        setStatus("Varietat desada.", "ok");
-        window.setTimeout(closePanel, 600);
-      });
+    openPanel(`Diccionari · ${dictionarySelection.text.trim()}`, dictionarySelection.rect);
+    setStatus("Comprovant el diccionari…", "loading");
+
+    const response = await H.sendMessage({
+      type: "inspecciona:dictionary",
+      word: dictionarySelection.text.trim()
     });
 
-    state.panelActions.replaceChildren(save);
+    if (!response.ok) {
+      setStatus(response.error || "No s'ha pogut consultar el diccionari.", "error");
+      return;
+    }
+
+    const entry = response.data || {};
+    const wrap = document.createElement("div");
+    wrap.className = "insp-dictionary";
+
+    const title = document.createElement("h3");
+    title.className = "insp-dictionary-title";
+    title.textContent = entry.word || dictionarySelection.text.trim();
+
+    const meta = document.createElement("p");
+    meta.className = "insp-dictionary-meta";
+    meta.textContent = entry.repoName ? `Font: ${entry.repoName}` : "Font: Softcatalà";
+
+    const summary = document.createElement("p");
+    summary.className = "insp-dictionary-summary";
+    summary.textContent = entry.summary || "Consulta de diccionari en dades lingüístiques de Softcatalà.";
+
+    const repoLink = document.createElement("a");
+    repoLink.href = entry.repoUrl || "https://github.com/Softcatala/catalan-dict-tools";
+    repoLink.target = "_blank";
+    repoLink.rel = "noopener noreferrer";
+    repoLink.className = "insp-link";
+    repoLink.textContent = "Obrir repositori de Softcatalà";
+
+    wrap.append(title, meta, summary, repoLink);
+    state.panelResults.replaceChildren(wrap);
+    setStatus(entry.wordFound ? "Paraula detectada en les dades de referència." : "No s'ha trobat cap entrada per aquesta paraula.", entry.wordFound ? "ok" : "info");
+  }
+
+  function openSettingsPage() {
+    const popupUrl = chrome.runtime.getURL("src/popup/popup.html");
+    window.open(popupUrl, "_blank", "noopener,noreferrer");
+    hideToolbar();
+    closePanel();
   }
 
   /* ── Helpers locals ─────────────────────────────────────────────────── */
@@ -981,7 +1515,7 @@
 
   function readEditableSelection(eventTarget) {
     const editable = findEditable(eventTarget) || findEditable(document.activeElement);
-    if (!editable) return null;
+    if (!editable) return readDocumentSelection();
 
     // <input> / <textarea>
     if (editable instanceof HTMLInputElement || editable instanceof HTMLTextAreaElement) {
@@ -1028,6 +1562,29 @@
     };
   }
 
+  function readDocumentSelection() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+
+    const text = String(selection.toString() || "").trim();
+    if (!text) return null;
+
+    const range = selection.getRangeAt(0);
+    let rect = range.getBoundingClientRect();
+    if ((!rect || rect.width === 0) && range.getClientRects().length > 0) {
+      rect = range.getClientRects()[0];
+    }
+    if (!rect) return null;
+
+    return {
+      kind: "document-selection",
+      target: null,
+      text,
+      rect,
+      isSingleWord: isSingleWord(text)
+    };
+  }
+
   function findEditable(node) {
     if (!node) return null;
     const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
@@ -1050,6 +1607,119 @@
 
   function isSingleWord(text) {
     return /^\p{L}[\p{L}'’\-]*$/u.test(String(text || "").trim());
+  }
+
+  function resolveSynonymSelection() {
+    if (state.selection?.text && isSingleWord(state.selection.text)) {
+      return state.selection;
+    }
+
+    const editable = findEditable(document.activeElement) || findEditable(state.selection?.target);
+    if (!editable) return null;
+
+    if (editable instanceof HTMLInputElement || editable instanceof HTMLTextAreaElement) {
+      return readWordAtCaretInTextControl(editable);
+    }
+
+    return readWordAtCaretInContentEditable(editable);
+  }
+
+  function resolveDictionarySelection() {
+    const text = String(state.selection?.text || "").trim();
+    if (text) {
+      return state.selection;
+    }
+
+    return resolveSynonymSelection();
+  }
+
+  function readWordAtCaretInTextControl(editable) {
+    const value = editable.value || "";
+    if (!value.trim()) return null;
+
+    const caret = editable.selectionStart ?? 0;
+    const { start, end } = expandWordBounds(value, caret);
+    if (end <= start) return null;
+
+    const text = value.slice(start, end).trim();
+    if (!isSingleWord(text)) return null;
+
+    return {
+      kind: "text-control",
+      target: editable,
+      text,
+      start,
+      end,
+      rect: editable.getBoundingClientRect(),
+      segments: [],
+      isSingleWord: true
+    };
+  }
+
+  function readWordAtCaretInContentEditable(editable) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    if (findEditable(selection.anchorNode) !== editable) return null;
+
+    const anchorNode = selection.anchorNode;
+    if (!anchorNode || anchorNode.nodeType !== Node.TEXT_NODE) return null;
+
+    const source = anchorNode.nodeValue || "";
+    const caret = selection.anchorOffset ?? 0;
+    const { start, end } = expandWordBounds(source, caret);
+    if (end <= start) return null;
+
+    const range = document.createRange();
+    range.setStart(anchorNode, start);
+    range.setEnd(anchorNode, end);
+
+    const collected = collectSelectionSegments(editable, range);
+    const text = (collected.text || "").trim();
+    if (!text || !isSingleWord(text) || collected.segments.length === 0) return null;
+
+    let rect = range.getBoundingClientRect();
+    if ((!rect || rect.width === 0) && range.getClientRects().length > 0) {
+      rect = range.getClientRects()[0];
+    }
+    if (!rect) return null;
+
+    return {
+      kind: "contenteditable",
+      target: editable,
+      text,
+      segments: collected.segments,
+      rect,
+      isSingleWord: true
+    };
+  }
+
+  function expandWordBounds(text, caret) {
+    const value = String(text || "");
+    if (!value) return { start: 0, end: 0 };
+
+    let index = Math.max(0, Math.min(caret, value.length));
+    if (index === value.length) index = value.length - 1;
+    if (index < 0) return { start: 0, end: 0 };
+
+    if (!isWordChar(value[index])) {
+      if (index > 0 && isWordChar(value[index - 1])) {
+        index -= 1;
+      } else {
+        return { start: 0, end: 0 };
+      }
+    }
+
+    let start = index;
+    let end = index + 1;
+
+    while (start > 0 && isWordChar(value[start - 1])) start -= 1;
+    while (end < value.length && isWordChar(value[end])) end += 1;
+
+    return { start, end };
+  }
+
+  function isWordChar(char) {
+    return /[\p{L}'’\-]/u.test(char || "");
   }
 
   /* ── Drag del panell ────────────────────────────────────────────────── */

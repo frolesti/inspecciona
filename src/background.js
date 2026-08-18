@@ -317,6 +317,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((error) => sendResponse({ ok: false, error: normalizeError(error) }));
     return true;
   }
+
+  if (type === "inspecciona:dictionary") {
+    handleDictionaryMessage(message)
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((error) => sendResponse({ ok: false, error: normalizeError(error) }));
+    return true;
+  }
 });
 
 async function handleCheckMessage(message) {
@@ -357,6 +364,25 @@ async function handleCheckMessage(message) {
   recordBackendUsage("corrector", url, true, "", endpoints.mode);
 
   return response.json();
+}
+
+async function handleDictionaryMessage(message) {
+  const word = normalizeWord(message?.word);
+  if (!word) {
+    throw new Error("Indica una paraula per consultar el diccionari.");
+  }
+
+  const repoName = "Softcatalà / catalan-dict-tools";
+  const repoUrl = "https://github.com/Softcatala/catalan-dict-tools";
+  const wordFound = word.length >= 2;
+
+  return {
+    word,
+    wordFound,
+    summary: `Prototip inicial de diccionari basat en el repositori ${repoName}.`,
+    repoName,
+    repoUrl
+  };
 }
 
 async function handleSynonymsMessage(message) {

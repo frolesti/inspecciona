@@ -1,12 +1,10 @@
 ﻿{
     "manifest_version":  3,
     "name":  "Inspecciona",
-    "version":  "1.3.3",
+    "version":  "1.3.5",
     "description":  "Corrector ortogràfic, gramatical i tipogràfic per al català amb serveis locals (Docker).",
     "permissions":  [
-                        "storage",
-                        "activeTab",
-                        "scripting"
+                        "storage"
                     ],
     "host_permissions":  [
                              "http://localhost/*",
