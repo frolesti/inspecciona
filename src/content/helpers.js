@@ -15,11 +15,15 @@
       }
       try {
         chrome.runtime.sendMessage(payload, (response) => {
-          if (chrome.runtime.lastError) {
-            resolve({ ok: false, error: chrome.runtime.lastError.message });
-            return;
+          try {
+            if (chrome.runtime.lastError) {
+              resolve({ ok: false, error: chrome.runtime.lastError.message });
+              return;
+            }
+            resolve(response || { ok: false, error: "Sense resposta del servei." });
+          } catch (error) {
+            resolve({ ok: false, error: error?.message || "L'extensió s'ha actualitzat. Refresca la pàgina per continuar." });
           }
-          resolve(response || { ok: false, error: "Sense resposta del servei." });
         });
       } catch (error) {
         resolve({ ok: false, error: error?.message || "Error de comunicació." });

@@ -341,6 +341,10 @@
   color: var(--insp-ink-soft);
 }
 
+.insp-dictionary-summary {
+  white-space: pre-line;
+}
+
 .insp-link {
   color: var(--insp-info);
   font-weight: 600;

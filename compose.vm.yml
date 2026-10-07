@@ -5,6 +5,7 @@ services:
     depends_on:
       - languagetool
       - sinonims
+      - diccionari
     environment:
       CORRECTOR_HOST: ${CORRECTOR_HOST}
       SINONIMS_HOST: ${SINONIMS_HOST}
@@ -21,6 +22,29 @@ services:
       - caddy-data:/data
       - caddy-config:/config
       - caddy-logs:/var/log/caddy
+
+  diccionari:
+    image: python:3.11.14-slim-bookworm
+    restart: unless-stopped
+    working_dir: /work/diccionari/src/web
+    environment:
+      DICTIONARY_INDEX_DIR: /data/indexdir
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    expose:
+      - "8001"
+    volumes:
+      - ./backend/diccionari-multilingue:/work/diccionari:ro
+      - ./local-backend/diccionari:/data:ro
+      - diccionari-python:/opt/diccionari-python
+    command: >
+      sh -ec '
+      if [ ! -x /opt/diccionari-python/bin/gunicorn ]; then
+        python -m venv /opt/diccionari-python;
+        /opt/diccionari-python/bin/pip install --no-cache-dir Flask==3.1.2 Whoosh==2.7.4 mwparserfromhell==0.7.2 gunicorn==23.0.0;
+      fi;
+      test -f /data/indexdir/_MAIN_0.toc || test -n "$$(find /data/indexdir -name "*.toc" -print -quit)";
+      exec /opt/diccionari-python/bin/gunicorn --bind 0.0.0.0:8001 --workers 2 --threads 2 --timeout 30 --access-logfile - web_search:app'
 
   languagetool:
     image: maven:3.9.6-eclipse-temurin-17
@@ -96,3 +120,4 @@ volumes:
   caddy-logs:
   languagetool-m2:
   sinonims-m2:
+  diccionari-python:

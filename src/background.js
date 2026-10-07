@@ -20,7 +20,8 @@ const VM_BACKEND_ENDPOINTS = {
   mode: "remote",
   corrector: `${VM_BACKEND_BASE_URL}/v2/check`,
   sinonimsSearch: `${VM_BACKEND_BASE_URL}/sinonims-api/search/`,
-  sinonimsAutocomplete: `${VM_BACKEND_BASE_URL}/sinonims-api/autocomplete/`
+  sinonimsAutocomplete: `${VM_BACKEND_BASE_URL}/sinonims-api/autocomplete/`,
+  dictionary: `${VM_BACKEND_BASE_URL}/diccionari-api/search/`
 };
 
 const DONATION_URL = "https://frolesti.aixeta.cat/";
@@ -187,12 +188,16 @@ function getLimitErrorMessage(status) {
   return `Hem arribat al limit d'us del servei (${status}). Si vols que segueixi disponible, dona suport al projecte a l'Aixeta.`;
 }
 
-async function fetchWithTimeout(url, init = {}) {
+async function fetchWithTimeout(url, init = {}, retries = 0) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (error) {
+    if (retries > 0) {
+      clearTimeout(timer);
+      return fetchWithTimeout(url, init, retries - 1);
+    }
     if (error?.name === "AbortError") {
       throw new Error("Hi ha un pic de trafic i el servidor triga massa a respondre. Torna-ho a provar en uns segons.");
     }
@@ -327,8 +332,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function handleCheckMessage(message) {
-  const text = String(message?.text ?? "").trim();
-  if (!text) {
+  const text = String(message?.text ?? "");
+  if (!text.trim()) {
     throw new Error("No hi ha text per corregir.");
   }
 
@@ -372,17 +377,63 @@ async function handleDictionaryMessage(message) {
     throw new Error("Indica una paraula per consultar el diccionari.");
   }
 
-  const repoName = "Softcatalà / catalan-dict-tools";
-  const repoUrl = "https://github.com/Softcatala/catalan-dict-tools";
-  const wordFound = word.length >= 2;
+  const endpoints = await resolveBackendEndpoints();
+  const url = `${endpoints.dictionary}${encodeURIComponent(word)}?lang=ca&it=1`;
+  await assertHostPermission(url);
+  const response = await fetchWithTimeout(url, {}, 1);
+  if (!response.ok) {
+    recordBackendUsage("dictionary", url, false, `HTTP ${response.status}`, endpoints.mode);
+    throw new Error(`El diccionari ha respost amb error (${response.status}).`);
+  }
+  recordBackendUsage("dictionary", url, true, "", endpoints.mode);
+
+  const payload = await response.json();
+  const entries = Array.isArray(payload) ? payload : [];
+  const definitions = [...new Set(entries.flatMap((entry) =>
+    String(entry.definition_ca || "").split(/\r?\n/).map((definition) => definition.trim()).filter(Boolean)
+  ))];
+  const title = entries[0]?.references?.wikidictionary_ca || entries[0]?.word_ca || word;
+  const sourceUrl = `https://ca.wiktionary.org/wiki/${encodeURIComponent(title)}`;
 
   return {
-    word,
-    wordFound,
-    summary: `Prototip inicial de diccionari basat en el repositori ${repoName}.`,
-    repoName,
-    repoUrl
+    word: title,
+    wordFound: definitions.length > 0,
+    definitions,
+    summary: definitions.join("\n\n"),
+    repoName: "Softcatalà / Viccionari (CC BY-SA 4.0)",
+    repoUrl: sourceUrl
   };
+}
+
+function extractCatalanDefinitions(extract, word) {
+  const section = String(extract).match(/(?:^|\n)==\s*Català\s*==\s*\n([\s\S]*?)(?=\n==\s*[^=][^\n]*?==\s*(?:\n|$)|$)/i);
+  if (!section) return [];
+
+  const partOfSpeech = /^(?:Nom|Verb|Adjectiu|Adverbi|Preposició|Conjunció|Interjecció|Pronom|Determinant|Numeral|Article|Prefix|Sufix|Locució|Sigla|Abreviatura|Onomatopeia|Partícula|Lletra|Símbol)$/i;
+  const headwordLine = new RegExp(`^${String(word).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(?:intr|tr|impers|aux|m|f|n|adj|adv|v|pron|prep|conj)\\b`, "i");
+  const definitions = [];
+  let category = "";
+  let skipHeadword = false;
+
+  for (const rawLine of section[1].split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const heading = line.match(/^===\s*([^=]+?)\s*===$/);
+    if (heading) {
+      category = partOfSpeech.test(heading[1].trim()) ? heading[1].trim() : "";
+      skipHeadword = Boolean(category);
+      continue;
+    }
+    if (!category || !line || /^={2,}/.test(line)) continue;
+    if (skipHeadword && headwordLine.test(line)) {
+      skipHeadword = false;
+      continue;
+    }
+    skipHeadword = false;
+    if (/^(?:Pronúncia|Rimes|Etimologia|Homòfon|Transcripció)\b/i.test(line)) continue;
+    definitions.push(`${category}: ${line}`);
+  }
+
+  return definitions;
 }
 
 async function handleSynonymsMessage(message) {

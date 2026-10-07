@@ -37,8 +37,7 @@ if (-not $RemoteBasePath) {
 
 $repos = @(
 	"Softcatala/catalan-dict-tools",
-	"Softcatala/diccionari-multilingue",
-	"Softcatala/diccionari-angles-catala"
+	"Softcatala/diccionari-multilingue"
 )
 
 foreach ($repo in $repos) {

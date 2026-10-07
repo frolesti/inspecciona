@@ -1,19 +1,26 @@
 # Inspecciona
 
-Extensió de Google Chrome centrada en català, integrada amb serveis locals executats amb Docker.
+Extensió de Google Chrome centrada en català, integrada amb serveis propis executats amb Docker a la VM.
 
-## Primera versió inclosa
+## Versió 2.0
 
-- Correcció ortogràfica i gramatical sobre text lliure.
+- Detecció ortogràfica i gramatical mentre s'escriu, amb revisió després d'una pausa de 480 ms.
+- Correccions directament sobre les incidències marcades, sense haver de seleccionar el text.
+- Clicar el text o moure el cursor no torna a carregar la detecció.
 - Cerca de sinònims d'una paraula.
+- Consulta de definicions del diccionari català allotjat a la mateixa VM.
 - Autocomplete de paraules del diccionari de sinònims (funcionalitat addicional de Softcatalà).
 
 ## Backend
 
-L'extensió funciona exclusivament contra serveis locals:
+La build distribuïda consulta els serveis propis de la VM:
 
-- Corrector local: `http://localhost:8081/v2/check`
-- Sinònims local: `http://localhost:8000/sinonims-api/`
+- Corrector: `https://corrector.34.118.197.141.nip.io/v2/check`
+- Sinònims: `https://corrector.34.118.197.141.nip.io/sinonims-api/`
+- Diccionari: `https://corrector.34.118.197.141.nip.io/diccionari-api/search/`
+
+Els scripts de backend local preparen només el corrector i els sinònims;
+el diccionari de la versió 2.0 està desplegat a la VM.
 
 ## Estructura
 
@@ -95,3 +102,41 @@ Els fitxers de configuració del servidor de sinònims viuen a `local-backend/co
 
 S'ha deixat una icona provisional a `assets/icon.svg`.
 Si vols usar exactament el teu SVG definitiu, només cal substituir aquest fitxer i, si cal, afegir versions PNG per a icones de manifest.
+
+## Diccionari català a la VM
+
+El servei `diccionari` de `compose.vm.yml` executa el projecte original
+[Softcatala/diccionari-multilingue](https://github.com/Softcatala/diccionari-multilingue)
+amb Flask, Gunicorn i Whoosh. La consulta pública és
+`https://corrector.34.118.197.141.nip.io/diccionari-api/search/casa?lang=ca&it=1`.
+Retorna una llista d'entrades amb `word_ca`, `definition_ca` i `references`;
+una paraula inexistent retorna `[]`. No consulta serveis externs, no usa MongoDB
+i té el seguiment de consultes desactivat.
+
+El codi recuperat viu a `backend/diccionari-multilingue`. Es mantenen les llicències
+originals del projecte. El corpus és el dump oficial de
+[Viccionari](https://dumps.wikimedia.org/cawiktionary/latest/), amb atribució als
+col·laboradors i [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+S'importen exclusivament les definicions de les seccions catalanes de l'espai principal,
+inclosos noms, verbs i altres categories, sense exigir traduccions ni llistes Apertium.
+
+A producció, `/home/frolesti4/inspecciona/local-backend/diccionari` conserva el dump i
+`indexdir`; el contenidor els munta en mode de només lectura a `/data`.
+El volum `diccionari-python` conserva les dependències fixades.
+Per reimportar un dump descarregat i verificat amb el checksum oficial, des del
+directori de producció, amb el servei aturat durant la reconstrucció de l'índex:
+
+```sh
+sudo -n docker compose --env-file .env.vm -f compose.vm.yml stop diccionari
+sudo -n docker compose --env-file .env.vm -f compose.vm.yml run --rm --no-deps \
+  -v /home/frolesti4/inspecciona/local-backend/diccionari:/data diccionari \
+  /opt/diccionari-python/bin/python /work/diccionari/sources/wikidictionary/extract-to-json.py \
+  /data/cawiktionary-latest-pages-articles.xml.bz2 --index-dir /data/indexdir
+sudo -n docker compose --env-file .env.vm -f compose.vm.yml up -d --no-deps diccionari
+```
+
+Abans de canviar les rutes, cal fer còpia de seguretat de `compose.vm.yml` i
+`deploy/Caddyfile`, validar Compose amb `config --quiet` i Caddy amb `caddy validate`.
+Després cal recrear només Caddy amb `up -d --no-deps --force-recreate caddy`, perquè
+el seu fitxer de configuració és un bind mount individual. No cal reiniciar
+LanguageTool ni sinònims.

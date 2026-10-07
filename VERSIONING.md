@@ -73,5 +73,6 @@ L'script fa tot sol:
 
 | Versió | Data       | Descripció                                           |
 |--------|------------|------------------------------------------------------|
+| 2.0.0  | 2026-10-07 | Detecció mentre s'escriu en lloc de seleccionar text per corregir; diccionari català a la VM |
 | 0.1.0  | 2026-06-17 | MVP: corrector, sinònims, autocomplete               |
 | 0.2.0  | 2026-06-17 | Refactor: zero CSS extern, Bootstrap als HTML, scripts de build |

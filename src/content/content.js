@@ -50,6 +50,7 @@
     inlineMarkerTooltip: null,
     inlineLiveLayer: null,
     inlineLiveMatches: [],
+    inlineLiveText: "",
     inlinePopup: null,
     inlineIgnored: new Set(),
     inlineReviewTimer: null,
@@ -58,10 +59,9 @@
   };
 
   const LIVE_INPUT_DEBOUNCE_MS = 480;
-  const LIVE_SELECTION_DEBOUNCE_MS = 360;
 
   const inlineUtils = window.InspeccionaInlineUtils || {
-    classifyMatchKind: (match) => {
+     classifyMatchKind: (match) => {
       const catId = (match?.rule?.category?.id || "").toUpperCase();
       const issue = (match?.rule?.issueType || "").toLowerCase();
       const ruleId = (match?.rule?.id || "").toUpperCase();
@@ -75,7 +75,7 @@
       return "grammar";
     },
     getMarkerStyles: (kind) => ({
-      typo: { color: "#c0392b", label: "Ortografia" },
+        typo: { color: "#c0392b", label: "Ortografia" },
       grammar: { color: "#2c5d8a", label: "Gramàtica" },
       style: { color: "#1f5f3e", label: "Estil" }
     }[kind] || { color: "#2c5d8a", label: "Gramàtica" })
@@ -117,11 +117,7 @@
     document.addEventListener("mouseup", onMouseUp, true);
     document.addEventListener("mousedown", onPointerDown, true);
     document.addEventListener("keydown", onKeyDown, true);
-    document.addEventListener("selectionchange", onSelectionChange, true);
     document.addEventListener("input", onInputChange, true);
-    document.addEventListener("keyup", onInputChange, true);
-    document.addEventListener("paste", onInputChange, true);
-    document.addEventListener("cut", onInputChange, true);
     document.addEventListener("compositionend", onInputChange, true);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onResize);
@@ -138,9 +134,8 @@
         if (!isPanelOpen()) hideToolbar();
         return;
       }
-      state.selection = next;
+      if (!state.inlineLiveLayer && !state.inlineMarker) state.selection = next;
       if (!isPanelOpen()) showToolbar(next.rect);
-      runInlineReview(next);
     }, 0);
   }
 
@@ -149,7 +144,7 @@
     if (isInsideUi(event.target)) return;
     hideToolbar();
     closePanel();
-    hideInlineReview();
+    if (findEditable(event.target) !== state.selection?.target) hideInlineReview();
   }
 
   function onKeyDown(event) {
@@ -161,26 +156,13 @@
     }
   }
 
-  function onSelectionChange() {
-    if (!state.enabled) return;
-    if (state.inlineReviewTimer) window.clearTimeout(state.inlineReviewTimer);
-    state.inlineReviewTimer = window.setTimeout(() => {
-      const next = readEditableSnapshot(document.activeElement);
-      if (!next) {
-        hideInlineMarker();
-        return;
-      }
-      state.selection = next;
-      if (next.kind === "contenteditable") {
-        runInlineReview(next, { live: true });
-      }
-    }, LIVE_SELECTION_DEBOUNCE_MS);
-  }
-
   function onInputChange(event) {
     if (!state.enabled) return;
     if (isInsideUi(event.target)) return;
+    if (!findEditable(event.target)) return;
+    hideInlineReview();
     if (state.inlineReviewTimer) window.clearTimeout(state.inlineReviewTimer);
+    if (event.isComposing) return;
     state.inlineReviewTimer = window.setTimeout(() => {
       const next = readEditableSnapshot(event.target);
       if (!next) {
@@ -363,11 +345,13 @@
   }
 
   function hideInlineReview() {
+    state.inlineReviewSeq++;
     hideInlineMarker();
     hideInlinePopup();
     state.inlineLiveLayer?.remove();
     state.inlineLiveLayer = null;
     state.inlineLiveMatches = [];
+    state.inlineLiveText = "";
     if (state.inlinePopupTimer) window.clearTimeout(state.inlinePopupTimer);
     state.inlinePopupTimer = null;
   }
@@ -379,7 +363,7 @@
     if (!state.selection?.target || !state.selection.target.isConnected) return;
 
     const fresh = readContentEditableSnapshot(state.selection.target);
-    if (!fresh || fresh.kind !== "contenteditable") {
+    if (!fresh || fresh.kind !== "contenteditable" || fresh.text !== state.inlineLiveText) {
       hideInlineReview();
       return;
     }
@@ -403,7 +387,16 @@
         continue;
       }
 
-      const rect = Array.from(range.getClientRects())[rectIndex];
+      const rects = fresh.segments.flatMap((segment) => {
+        const start = Math.max(match.offset, segment.textStart);
+        const end = Math.min(match.offset + match.length, segment.textStart + segment.len);
+        if (end <= start) return [];
+        const fragment = document.createRange();
+        fragment.setStart(segment.node, segment.nodeOffset + start - segment.textStart);
+        fragment.setEnd(segment.node, segment.nodeOffset + end - segment.textStart);
+        return Array.from(fragment.getClientRects()).filter((entry) => entry.width > 0 && entry.height > 0);
+      });
+      const rect = rects[rectIndex];
       if (!rect) {
         hit.style.display = "none";
         continue;
@@ -413,7 +406,7 @@
       hit.style.left = `${window.scrollX + rect.left}px`;
       hit.style.top = `${window.scrollY + rect.top - 4}px`;
       hit.style.height = `${Math.max(16, rect.height + 8)}px`;
-      hit.style.width = `${Math.max(12, rect.width)}px`;
+      hit.style.width = `${rect.width}px`;
     }
   }
 
@@ -435,7 +428,6 @@
 
     const seq = ++state.inlineReviewSeq;
     ensureUi();
-    state.workingText = selection.text;
     const response = await H.sendMessage({
       type: "inspecciona:check",
       text: selection.text,
@@ -444,11 +436,22 @@
     });
 
     if (seq !== state.inlineReviewSeq) return;
+    if (state.selection?.target !== selection.target) return;
 
     if (!response.ok) {
       hideInlineReview();
       return;
     }
+
+    if (options.live) {
+      const fresh = readContentEditableSnapshot(selection.target);
+      if (!fresh || fresh.text !== selection.text) return;
+      selection = fresh;
+    } else if (state.selection !== selection) {
+      return;
+    }
+    state.selection = selection;
+    state.workingText = selection.text;
 
     if (options.live) {
       renderLiveReview(selection, response.data);
@@ -462,8 +465,9 @@
     hideInlinePopup();
     state.inlineLiveLayer?.remove();
 
-    const matches = normalizeMatches(data?.matches || []);
+    const matches = normalizeMatches(data?.matches || [], selection.text);
     state.inlineLiveMatches = matches;
+    state.inlineLiveText = selection.text;
     if (!matches.length) return;
 
     const firstMatch = matches[0];
@@ -495,7 +499,15 @@
       const suggestion = getFirstSuggestion(match);
       const popupText = buildPopupText(match, kind, suggestion);
       const matchKey = buildLiveMatchKey(selection.text, match);
-      const rects = Array.from(range.getClientRects());
+      const rects = selection.segments.flatMap((segment) => {
+        const start = Math.max(match.offset, segment.textStart);
+        const end = Math.min(match.offset + match.length, segment.textStart + segment.len);
+        if (end <= start) return [];
+        const fragment = document.createRange();
+        fragment.setStart(segment.node, segment.nodeOffset + start - segment.textStart);
+        fragment.setEnd(segment.node, segment.nodeOffset + end - segment.textStart);
+        return Array.from(fragment.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
+      });
 
       rects.forEach((rect, rectIndex) => {
         const hit = document.createElement("button");
@@ -508,7 +520,7 @@
         hit.style.left = `${window.scrollX + rect.left}px`;
         hit.style.top = `${window.scrollY + rect.top - 4}px`;
         hit.style.height = `${Math.max(16, rect.height + 8)}px`;
-        hit.style.width = `${Math.max(12, rect.width)}px`;
+        hit.style.width = `${rect.width}px`;
 
         const line = document.createElement("span");
         line.className = "insp-live-hit-line";
@@ -605,8 +617,9 @@
     }, 120);
   }
 
-  function normalizeMatches(matches) {
-    return (matches || []).filter((match) => Number.isInteger(match.offset) && Number.isInteger(match.length) && match.length > 0);
+  function normalizeMatches(matches, text = state.workingText) {
+    return (matches || []).filter((match) => Number.isInteger(match.offset) && Number.isInteger(match.length) &&
+      match.offset >= 0 && match.length > 0 && match.offset + match.length <= text.length);
   }
 
   function buildLiveMatchKey(sourceText, match) {
@@ -648,7 +661,7 @@
     }
 
     const start = segmentAtTextOffset(segments, offset);
-    const end = segmentAtTextOffset(segments, offset + length);
+    const end = segmentAtTextOffset(segments, offset + length, true);
     if (!start || !end) return null;
 
     const absStart = start.nodeStart + (offset - start.textStart);
@@ -667,8 +680,8 @@
         kind: "text-control",
         target: editable,
         text: value,
-        start: editable.selectionStart ?? 0,
-        end: editable.selectionEnd ?? 0,
+        start: 0,
+        end: value.length,
         rect: editable.getBoundingClientRect(),
         segments: [],
         isSingleWord: isSingleWord(value)
@@ -681,25 +694,9 @@
   function readContentEditableSnapshot(editable) {
     if (!editable) return null;
 
-    const segments = [];
-    let text = "";
-    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
-    let node;
-    let nodeStart = 0;
-
-    while ((node = walker.nextNode())) {
-      const value = node.nodeValue || "";
-      if (!value) continue;
-      segments.push({
-        node,
-        nodeOffset: 0,
-        nodeStart,
-        textStart: text.length,
-        len: value.length
-      });
-      text += value;
-      nodeStart += value.length;
-    }
+    const range = document.createRange();
+    range.selectNodeContents(editable);
+    const { text, segments } = collectSelectionSegments(editable, range);
 
     if (!text.trim() || segments.length === 0) return null;
 
@@ -716,9 +713,7 @@
   function renderInlineMarker(selection, data) {
     hideInlineMarker();
 
-    const matches = (data?.matches || []).filter(
-      (match) => Number.isInteger(match.offset) && Number.isInteger(match.length) && match.length > 0
-    );
+    const matches = normalizeMatches(data?.matches || [], selection.text);
 
     if (!matches.length) return;
 
@@ -874,9 +869,7 @@
   }
 
   function renderCorrections(data) {
-    const allMatches = (data?.matches || []).filter(
-      (match) => Number.isInteger(match.offset) && Number.isInteger(match.length) && match.length > 0
-    );
+    const allMatches = normalizeMatches(data?.matches || []);
     allMatches.forEach((match, index) => { match.__id = index; });
     state.lastMatches = allMatches;
 
@@ -1070,20 +1063,41 @@
   function applySingleReplacement(offset, length, replacement) {
     if (!state.selection?.target) return;
 
+    const current = state.selection;
+    if (current.kind === "contenteditable") {
+      const segments = current.segments || [];
+      const first = segments[0];
+      const last = segments[segments.length - 1];
+      const range = first && last && buildRangeFromOffsets(current.target, first.nodeStart, last.nodeStart + last.len);
+      const collected = range && collectSelectionSegments(current.target, range);
+      const reviewedNodes = segments.map((segment) => state.workingText.slice(segment.textStart, segment.textStart + segment.len)).join("");
+      const currentNodes = collected?.segments.map((segment) => segment.node.nodeValue.slice(segment.nodeOffset, segment.nodeOffset + segment.len)).join("");
+      if (!collected || currentNodes !== reviewedNodes || current.text !== state.workingText) {
+        hideInlineReview();
+        setStatus("La correcció ja no correspon al text actual.", "warn");
+        return;
+      }
+      current.segments = collected.segments;
+    } else if (current.target.value.slice(current.start, current.end) !== state.workingText) {
+      hideInlineReview();
+      return;
+    }
+
     // Validem que l'incidència encara encaixa dins del text actual.
     if (!Number.isInteger(offset) || !Number.isInteger(length) || length <= 0 ||
         offset < 0 || (offset + length) > state.workingText.length) {
-      setStatus("S'ha desactualitzat la revisió. Tornant a calcular…", "warn");
-      runCheck();
+      hideInlineReview();
+      setStatus("La correcció ja no correspon al text actual.", "warn");
       return;
     }
 
     if (state.selection.kind === "text-control") {
       replaceInTextControl(offset, length, replacement);
-      state.workingText = H.replaceTextSlice(state.workingText, offset, length, replacement);
-      state.selection.end = state.selection.start + state.workingText.length;
-      setStatus("Revisant…", "loading");
-      runCheck();
+      const fresh = readEditableSnapshot(current.target);
+      if (fresh) {
+        state.selection = fresh;
+        state.workingText = fresh.text;
+      }
       return;
     }
 
@@ -1102,48 +1116,31 @@
     const target = state.selection.target;
     const segments = state.selection.segments || [];
     const segStart = segmentAtTextOffset(segments, effOffset);
-    const segEnd = segmentAtTextOffset(segments, effOffset + effLength);
+    const segEnd = segmentAtTextOffset(segments, effOffset + effLength, true);
     if (!segStart || !segEnd) {
-      setStatus("S'ha desactualitzat la revisió. Tornant a calcular…", "warn");
-      runCheck();
+      hideInlineReview();
+      setStatus("No s'ha pogut localitzar el fragment de la correcció.", "warn");
       return;
     }
 
     const absStart = segStart.nodeStart + (effOffset - segStart.textStart);
     const absEnd = segEnd.nodeStart + (effOffset + effLength - segEnd.textStart);
-    const regionStart = segments[0].nodeStart;
-    const oldNodeLen = segments.reduce((sum, s) => sum + s.len, 0);
-    const newNodeLen = oldNodeLen - (absEnd - absStart) + effReplacement.length;
-    const modelText = H.replaceTextSlice(state.workingText, offset, length, replacement);
-
+    if (absEnd - absStart !== effLength) {
+      setStatus("Aquesta correcció afecta salts de paràgraf i s'ha d'aplicar manualment.", "warn");
+      return;
+    }
     replaceInContentEditable(absStart, absEnd, effReplacement, (ok) => {
       if (!ok) {
         setStatus("L'editor no permet la inserció automàtica.", "warn");
         return;
       }
 
-      // Re-seleccionem la regió editada (en espai de text de nodes, estable
-      // davant reflows de l'editor) i re-llegim l'estat REAL del DOM per no
-      // acumular cap deriva d'offsets.
-      const region = buildRangeFromOffsets(target, regionStart, regionStart + newNodeLen);
-      if (region) {
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(region);
-
-        const fresh = readEditableSelection(target);
-        if (fresh) {
-          state.selection = fresh;
-          state.workingText = fresh.text;
-        } else {
-          state.workingText = modelText;
-        }
-      } else {
-        state.workingText = modelText;
+      const fresh = readContentEditableSnapshot(target);
+      if (fresh) {
+        state.selection = fresh;
+        state.workingText = fresh.text;
       }
-
-      setStatus("Revisant…", "loading");
-      runCheck();
+      onInputChange({ target });
     });
   }
 
@@ -1253,6 +1250,8 @@
       return;
     }
 
+    const before = target.textContent;
+    const expected = H.replaceTextSlice(before, absStart, absEnd - absStart, replacement);
     target.focus();
     const selection = window.getSelection();
     if (!selection) return;
@@ -1267,7 +1266,14 @@
     window.setTimeout(() => {
       let ok = false;
       try {
-        ok = document.execCommand("insertText", false, replacement);
+        if (!target.isConnected || target.textContent !== before || !target.contains(selection.anchorNode)) {
+          if (onDone) onDone(false);
+          return;
+        }
+        selection.removeAllRanges();
+        selection.addRange(domRange);
+        document.execCommand("insertText", false, replacement);
+        ok = target.textContent === expected;
       } catch (error) {
         console.warn("[Inspecciona] insertText ha fallat:", error?.message || error);
       }
@@ -1333,15 +1339,21 @@
   function collectSelectionSegments(editable, range) {
     const segments = [];
     let text = "";
-    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
     const blockOrder = getSelectedBlockOrder(editable, range);
     const blockIndex = new Map(blockOrder.map((block, idx) => [block, idx]));
     let node;
     let absPos = 0;
     let prevBlock = null;
     let first = true;
+    let pendingBreaks = 0;
 
     while ((node = walker.nextNode())) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.tagName === "BR" && range.intersectsNode(node)) pendingBreaks++;
+        continue;
+      }
+
       const len = node.nodeValue.length;
       if (range.intersectsNode(node)) {
         let s = 0;
@@ -1352,14 +1364,15 @@
         if (e > s) {
           const slice = node.nodeValue.slice(s, e);
           const block = nearestBlock(node, editable);
-          if (!first && block !== prevBlock) {
-            const prevIdx = blockIndex.get(prevBlock);
-            const currIdx = blockIndex.get(block);
-            const gap = Number.isInteger(prevIdx) && Number.isInteger(currIdx)
+          const prevIdx = blockIndex.get(prevBlock);
+          const currIdx = blockIndex.get(block);
+          const blockGap = !first && block !== prevBlock
+            ? Number.isInteger(prevIdx) && Number.isInteger(currIdx)
               ? Math.max(1, currIdx - prevIdx)
-              : 1;
-            text += "\n".repeat(gap);
-          }
+              : 1
+            : 0;
+          const lineBreaks = Math.max(blockGap, pendingBreaks);
+          if (lineBreaks > 0) text += "\n".repeat(lineBreaks);
 
           segments.push({
             node,
@@ -1371,6 +1384,7 @@
           text += slice;
           prevBlock = block;
           first = false;
+          pendingBreaks = 0;
         }
       }
       absPos += len;
@@ -1382,11 +1396,7 @@
   function nearestBlock(node, editable) {
     let el = node.parentElement;
     while (el && el !== editable) {
-      const tag = el.tagName;
-      if (tag === "DIV" || tag === "P" || tag === "LI" ||
-          tag === "SECTION" || tag === "ARTICLE" || tag === "BLOCKQUOTE") {
-        return el;
-      }
+      if (isBlockElement(el)) return el;
       el = el.parentElement;
     }
     return editable;
@@ -1401,22 +1411,23 @@
       if (!range.intersectsNode(el)) continue;
       blocks.push(el);
     }
-    return blocks;
+    return blocks.filter((block) => !blocks.some((other) => other !== block && block.contains(other)));
   }
 
   function isBlockElement(el) {
-    const tag = el.tagName;
-    return tag === "DIV" || tag === "P" || tag === "LI" ||
-      tag === "SECTION" || tag === "ARTICLE" || tag === "BLOCKQUOTE";
+    return ["block", "list-item", "table", "table-row", "table-cell", "flex", "grid", "flow-root"]
+      .includes(window.getComputedStyle(el).display);
   }
 
-  function segmentAtTextOffset(segments, textOffset) {
+  function segmentAtTextOffset(segments, textOffset, preferEnd = false) {
+    let boundary = null;
     for (const seg of segments) {
       if (textOffset >= seg.textStart && textOffset <= seg.textStart + seg.len) {
-        return seg;
+        if (textOffset < seg.textStart + seg.len || preferEnd) return seg;
+        boundary = seg;
       }
     }
-    return null;
+    return boundary;
   }
 
   // Redueix una substitució al fragment mínim que canvia realment, traient el
@@ -1474,6 +1485,10 @@
     }
 
     const entry = response.data || {};
+    if (!entry.wordFound) {
+      setStatus("No s'ha trobat cap definició en català per a aquesta paraula.", "info");
+      return;
+    }
     const wrap = document.createElement("div");
     wrap.className = "insp-dictionary";
 
@@ -1483,22 +1498,22 @@
 
     const meta = document.createElement("p");
     meta.className = "insp-dictionary-meta";
-    meta.textContent = entry.repoName ? `Font: ${entry.repoName}` : "Font: Softcatalà";
+    meta.textContent = `Font: ${entry.repoName || "Viccionari en català"}`;
 
     const summary = document.createElement("p");
     summary.className = "insp-dictionary-summary";
-    summary.textContent = entry.summary || "Consulta de diccionari en dades lingüístiques de Softcatalà.";
+    summary.textContent = entry.summary;
 
     const repoLink = document.createElement("a");
-    repoLink.href = entry.repoUrl || "https://github.com/Softcatala/catalan-dict-tools";
+    repoLink.href = entry.repoUrl || `https://ca.wiktionary.org/wiki/${encodeURIComponent(entry.word || dictionarySelection.text.trim())}`;
     repoLink.target = "_blank";
     repoLink.rel = "noopener noreferrer";
     repoLink.className = "insp-link";
-    repoLink.textContent = "Obrir repositori de Softcatalà";
+    repoLink.textContent = "Obrir l'entrada al Viccionari";
 
     wrap.append(title, meta, summary, repoLink);
     state.panelResults.replaceChildren(wrap);
-    setStatus(entry.wordFound ? "Paraula detectada en les dades de referència." : "No s'ha trobat cap entrada per aquesta paraula.", entry.wordFound ? "ok" : "info");
+    setStatus("Definicions trobades.", "ok");
   }
 
   function openSettingsPage() {
@@ -1540,7 +1555,7 @@
     // contenteditable
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
-    if (findEditable(selection.anchorNode) !== editable) return null;
+    if (findEditable(selection.anchorNode) !== editable || findEditable(selection.focusNode) !== editable) return null;
 
     const range = selection.getRangeAt(0);
     const { text, segments } = collectSelectionSegments(editable, range);

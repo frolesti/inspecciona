@@ -9,23 +9,29 @@
     }
     format json
   }
-  @sinonims path /sinonims-api/*
-  reverse_proxy @sinonims sinonims:8000 {
-    transport http {
-      dial_timeout 5s
-      response_header_timeout 30s
-      read_timeout 60s
-      write_timeout 60s
-      keepalive 2m
+  handle_path /diccionari-api/* {
+    reverse_proxy diccionari:8001
+  }
+  handle /sinonims-api/* {
+    reverse_proxy sinonims:8000 {
+      transport http {
+        dial_timeout 5s
+        response_header_timeout 30s
+        read_timeout 60s
+        write_timeout 60s
+        keepalive 2m
+      }
     }
   }
-  reverse_proxy languagetool:8081 {
-    transport http {
-      dial_timeout 5s
-      response_header_timeout 30s
-      read_timeout 60s
-      write_timeout 60s
-      keepalive 2m
+  handle {
+    reverse_proxy languagetool:8081 {
+      transport http {
+        dial_timeout 5s
+        response_header_timeout 30s
+        read_timeout 60s
+        write_timeout 60s
+        keepalive 2m
+      }
     }
   }
 }
