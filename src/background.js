@@ -371,7 +371,7 @@ async function handleCheckMessage(message) {
   return response.json();
 }
 
-async function handleDictionaryMessage(message) {
+async function handleDictionaryMessage(message, resolveLemma = true) {
   const word = normalizeWord(message?.word);
   if (!word) {
     throw new Error("Indica una paraula per consultar el diccionari.");
@@ -392,6 +392,50 @@ async function handleDictionaryMessage(message) {
   const definitions = [...new Set(entries.flatMap((entry) =>
     String(entry.definition_ca || "").split(/\r?\n/).map((definition) => definition.trim()).filter(Boolean)
   ))];
+  if (!definitions.length && resolveLemma) {
+    let synonyms;
+    try {
+      synonyms = await handleSynonymsMessage({ word });
+    } catch {
+      synonyms = { results: [] };
+    }
+    const lemmas = [...new Set((synonyms.results || []).flatMap((entry) => [entry.lemma, entry.feminineLemma]).filter(Boolean))];
+    const candidates = lemmas.filter((candidate) => {
+      const singular = normalizeWord(candidate).toLocaleLowerCase("ca");
+      const plural = word.toLocaleLowerCase("ca");
+      if (!singular || /\s/.test(singular) || singular === plural) return false;
+      const plurals = [singular + "s"];
+      if (/[sçxz]$/.test(singular)) plurals.push(singular + "os");
+      if (singular.endsWith("s")) plurals.push(singular + "sos");
+      if (singular.endsWith("a")) plurals.push(singular.slice(0, -1) + "es");
+      if (singular.endsWith("ca")) plurals.push(singular.slice(0, -2) + "ques");
+      if (singular.endsWith("ga")) plurals.push(singular.slice(0, -2) + "gues");
+      if (singular.endsWith("ça")) plurals.push(singular.slice(0, -2) + "ces");
+      return plurals.includes(plural);
+    });
+    const searched = word.toLocaleLowerCase("ca");
+    for (const entry of synonyms.results || []) {
+      const lemma = normalizeWord(entry.lemma).toLocaleLowerCase("ca");
+      const feminine = normalizeWord(entry.feminineLemma).toLocaleLowerCase("ca");
+      if (!lemma || /\s/.test(lemma) || lemma === searched) continue;
+      const forms = feminine ? [feminine, feminine + "s"] : [];
+      if (feminine.endsWith("a")) forms.push(feminine.slice(0, -1) + "es");
+      if (feminine.endsWith("ca")) forms.push(feminine.slice(0, -2) + "ques");
+      if (feminine.endsWith("ga")) forms.push(feminine.slice(0, -2) + "gues");
+      if (feminine.endsWith("ça")) forms.push(feminine.slice(0, -2) + "ces");
+      if (entry.grammarCategory === "v") {
+        const stem = lemma.slice(0, -2);
+        if (lemma.endsWith("ar")) forms.push(stem + "at", stem + "ada", stem + "ats", stem + "ades");
+        if (lemma.endsWith("ir")) forms.push(stem + "it", stem + "ida", stem + "its", stem + "ides");
+        if (lemma.endsWith("er")) forms.push(stem + "ut", stem + "uda", stem + "uts", stem + "udes");
+      }
+      if (forms.includes(searched)) candidates.push(entry.lemma);
+    }
+    for (const lemma of new Set(candidates)) {
+      const result = await handleDictionaryMessage({ word: lemma }, false);
+      if (result.wordFound) return result;
+    }
+  }
   const title = entries[0]?.references?.wikidictionary_ca || entries[0]?.word_ca || word;
   const sourceUrl = `https://ca.wiktionary.org/wiki/${encodeURIComponent(title)}`;
 

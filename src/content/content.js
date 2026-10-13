@@ -4,7 +4,7 @@
 
   /* ── Icones SVG (inline, una sola línia per facilitat de manteniment) ── */
   const ICONS = {
-    synonyms: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M7 7h10v10"/></svg>',
+    synonyms: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4M20 7H4m4 14-4-4 4-4M4 17h16"/></svg>',
     dictionary: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a3 3 0 0 1 3-3h5v17H6a3 3 0 0 0-3 3V6Z"/><path d="M21 6a3 3 0 0 0-3-3h-5v17h5a3 3 0 0 1 3 3V6Z"/><path d="M11 5a2 2 0 0 0-2-2"/><path d="M13 5a2 2 0 0 1 2-2"/></svg>',
     settings: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1-.33H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-.06-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6c.36 0 .7-.12 1-.33.27-.2.46-.5.53-.84V3a2 2 0 1 1 4 0v.09c.07.34.26.64.53.84.3.21.64.33 1 .33a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.46.46-.6 1.14-.33 1.82.1.25.25.47.44.65.19.18.42.33.68.43H21a2 2 0 1 1 0 4h-.09c-.26.1-.49.25-.68.43-.19.18-.34.4-.44.65Z"/></svg>',
     close: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>'
@@ -114,13 +114,36 @@
   }
 
   function attachEvents() {
+    document.addEventListener("focusin", (event) => {
+      const next = readEditableSnapshot(event.target);
+      if (!next || (state.selection?.target === next.target && state.workingText === next.text)) return;
+      onInputChange(event);
+    }, true);
     document.addEventListener("mouseup", onMouseUp, true);
     document.addEventListener("mousedown", onPointerDown, true);
     document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("input", onInputChange, true);
     document.addEventListener("compositionend", onInputChange, true);
+    document.addEventListener("click", (event) => {
+      const selection = state.selection;
+      if (!state.enabled || selection?.kind !== "text-control" || event.target !== selection.target) return;
+      if (!state.inlineLiveLayer || selection.target.value !== state.inlineLiveText) return;
+      const caret = selection.target.selectionStart;
+      const match = state.inlineLiveMatches.find((entry) => caret >= entry.offset && caret <= entry.offset + entry.length);
+      if (!match) {
+        hideInlinePopup();
+        return;
+      }
+      const matchKey = buildLiveMatchKey(state.inlineLiveText, match);
+      if (state.inlineIgnored.has(matchKey)) return;
+      const kind = inlineUtils.classifyMatchKind(match);
+      const suggestion = getFirstSuggestion(match);
+      showInlinePopup(selection.target, buildPopupText(match, kind, suggestion), suggestion, kind, match, matchKey);
+      state.inlinePopup.dataset.pinned = "true";
+    }, true);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onResize);
+    if (findEditable(document.activeElement)) onInputChange({ target: document.activeElement });
   }
 
   function onMouseUp(event) {
@@ -166,11 +189,6 @@
     state.inlineReviewTimer = window.setTimeout(() => {
       const next = readEditableSnapshot(event.target);
       if (!next) {
-        hideInlineReview();
-        return;
-      }
-      if (next.kind !== "contenteditable") {
-        state.selection = next;
         hideInlineReview();
         return;
       }
@@ -246,6 +264,7 @@
 
     const status = document.createElement("p");
     status.className = "insp-status";
+    status.setAttribute("role", "status");
 
     const actions = document.createElement("div");
     actions.className = "insp-actions";
@@ -254,7 +273,30 @@
     results.className = "insp-results";
 
     body.append(preview, status, actions, results);
-    panel.append(header, body);
+    const footer = document.createElement("footer");
+    footer.className = "insp-panel-footer";
+    const logo = document.createElement("img");
+    logo.src = chrome.runtime.getURL("assets/icon-32.png");
+    logo.alt = "Inspecciona";
+    logo.width = 24;
+    logo.height = 24;
+    const store = document.createElement("a");
+    store.href = "https://chromewebstore.google.com/detail/inspecciona/hldpogfjccnfnjljahaeaieoankmiicg";
+    store.target = "_blank";
+    store.rel = "noopener noreferrer";
+    store.title = "Inspecciona a la Chrome Web Store";
+    store.setAttribute("aria-label", store.title);
+    store.appendChild(logo);
+    const credit = document.createElement("span");
+    credit.textContent = "Fet per ";
+    const author = document.createElement("a");
+    author.href = "https://frolesti.cat";
+    author.target = "_blank";
+    author.rel = "noopener noreferrer";
+    author.textContent = "frolesti";
+    credit.appendChild(author);
+    footer.append(store, credit);
+    panel.append(header, body, footer);
 
     root.append(toolbar, panel);
     document.documentElement.appendChild(root);
@@ -269,6 +311,13 @@
       const btn = event.target.closest("button, .insp-chip");
       if (btn) event.preventDefault();
     });
+    root.addEventListener("click", (event) => {
+      const link = event.target.closest("a[href]");
+      if (!link || !root.contains(link)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      window.open(link.href, "_blank", "noopener,noreferrer");
+    }, true);
 
     state.root = root;
     state.toolbar = toolbar;
@@ -285,6 +334,10 @@
     btnSettings.addEventListener("click", openSettingsPage);
 
     header.addEventListener("mousedown", onPanelDragStart);
+    const panelObserver = new ResizeObserver(() => {
+      if (isPanelOpen() && state.panelAnchorRect) placePanel(state.panelAnchorRect);
+    });
+    panelObserver.observe(panel);
   }
 
   function createIconButton(action, svg, label) {
@@ -444,7 +497,7 @@
     }
 
     if (options.live) {
-      const fresh = readContentEditableSnapshot(selection.target);
+      const fresh = readEditableSnapshot(selection.target);
       if (!fresh || fresh.text !== selection.text) return;
       selection = fresh;
     } else if (state.selection !== selection) {
@@ -470,18 +523,11 @@
     state.inlineLiveText = selection.text;
     if (!matches.length) return;
 
-    const firstMatch = matches[0];
-    const firstKind = inlineUtils.classifyMatchKind(firstMatch);
-    const firstSuggestion = getFirstSuggestion(firstMatch);
-    const firstPopupText = buildPopupText(firstMatch, firstKind, firstSuggestion);
-    const firstMatchKey = buildLiveMatchKey(selection.text, firstMatch);
-
     if (selection.kind !== "contenteditable") {
       const fallbackLayer = document.createElement("div");
       fallbackLayer.className = "insp-live-layer";
       state.inlineLiveLayer = fallbackLayer;
       state.root.appendChild(fallbackLayer);
-      showInlinePopup(selection.rect, firstPopupText, firstSuggestion, firstKind, firstMatch, firstMatchKey);
       return;
     }
 
@@ -530,15 +576,12 @@
           hit.classList.add("is-ignored");
         }
 
-        hit.addEventListener("mouseenter", () => {
-          if (state.inlineIgnored.has(matchKey)) return;
-          showInlinePopup(hit, popupText, suggestion, kind, match, matchKey);
-        });
-        hit.addEventListener("mouseleave", scheduleHideInlinePopup);
         hit.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
+          if (state.inlineIgnored.has(matchKey)) return;
           showInlinePopup(hit, popupText, suggestion, kind, match, matchKey);
+          state.inlinePopup.dataset.pinned = "true";
         });
 
         layer.appendChild(hit);
@@ -552,6 +595,7 @@
     const popup = document.createElement("div");
     popup.className = "insp-inline-popup";
     popup.dataset.kind = kind;
+    popup.dataset.matchKey = matchKey;
 
     const title = document.createElement("strong");
     title.textContent = popupText.title;
@@ -562,6 +606,26 @@
     const correction = document.createElement("p");
     correction.className = "insp-inline-popup-correction";
     correction.textContent = popupText.detail;
+
+    const suggestions = [...new Set((match.replacements || []).map((entry) => entry.value).filter(Boolean))];
+    let selectedSuggestion = suggestion;
+    if (suggestions.length > 1) {
+      const label = document.createElement("label");
+      label.textContent = "Correcció: ";
+      const select = document.createElement("select");
+      select.dataset.insp = "replacement";
+      for (const value of suggestions) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        option.selected = value === suggestion;
+        select.appendChild(option);
+      }
+      select.addEventListener("change", () => { selectedSuggestion = select.value; });
+      select.addEventListener("blur", scheduleHideInlinePopup);
+      label.appendChild(select);
+      correction.replaceChildren(label);
+    }
 
     const actions = document.createElement("div");
     actions.className = "insp-inline-popup-actions";
@@ -574,8 +638,8 @@
       apply.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        applySingleReplacement(match.offset, match.length, suggestion);
-        hideInlineReview();
+        hideInlinePopup();
+        applySingleReplacement(match.offset, match.length, selectedSuggestion);
       });
       actions.appendChild(apply);
     }
@@ -592,7 +656,20 @@
     });
     actions.appendChild(ignore);
 
-    popup.append(title, message, correction, actions);
+    const header = document.createElement("header");
+    header.className = "insp-panel-header";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "insp-panel-close";
+    close.setAttribute("aria-label", "Tanca");
+    close.innerHTML = ICONS.close;
+    close.addEventListener("click", hideInlinePopup);
+    header.append(title, close);
+    const body = document.createElement("div");
+    body.className = "insp-panel-body";
+    body.append(message, correction, actions);
+    const footer = state.panel.querySelector(".insp-panel-footer").cloneNode(true);
+    popup.append(header, body, footer);
     state.inlinePopup = popup;
     state.root.appendChild(popup);
     popup.addEventListener("mouseenter", () => {
@@ -606,15 +683,20 @@
     if (top < window.scrollY + 8) {
       top = window.scrollY + rect.bottom + 10;
     }
-    popup.style.left = `${window.scrollX + rect.left}px`;
-    popup.style.top = `${top}px`;
+    const left = Math.max(8, Math.min(rect.left, document.documentElement.clientWidth - popup.offsetWidth - 8));
+    const maxTop = window.scrollY + document.documentElement.clientHeight - popupHeight - 8;
+    popup.style.left = `${window.scrollX + left}px`;
+    popup.style.top = `${Math.max(window.scrollY + 8, Math.min(top, maxTop))}px`;
   }
 
   function scheduleHideInlinePopup() {
     if (state.inlinePopupTimer) window.clearTimeout(state.inlinePopupTimer);
+    if (state.inlinePopup?.dataset.pinned === "true") return;
     state.inlinePopupTimer = window.setTimeout(() => {
+      if (state.inlinePopup?.matches(":hover")) return;
+      if (state.inlinePopup?.contains(document.activeElement)) return;
       hideInlinePopup();
-    }, 120);
+    }, 450);
   }
 
   function normalizeMatches(matches, text = state.workingText) {
@@ -779,6 +861,7 @@
     state.panelTitle.textContent = title;
     state.panel.classList.add("is-open");
     hideToolbar();
+    state.panelAnchorRect = rect;
     placePanel(rect);
   }
 
@@ -792,6 +875,8 @@
 
   function resetPanel() {
     state.panelStatus.textContent = "";
+    state.panelStatus.dataset.kind = "";
+    state.panelResults.setAttribute("aria-busy", "false");
     state.panelPreview.textContent = "";
     state.panelActions.replaceChildren();
     state.panelResults.replaceChildren();
@@ -806,31 +891,30 @@
     if (state.panelDragged) return;
 
     requestAnimationFrame(() => {
+      if (!isPanelOpen() || state.panelDragged) return;
+      const viewport = window.visualViewport;
+      const viewportLeft = viewport?.offsetLeft || 0;
+      const viewportTop = viewport?.offsetTop || 0;
+      const viewportWidth = viewport?.width || document.documentElement.clientWidth;
+      const viewportHeight = viewport?.height || document.documentElement.clientHeight;
+      const below = Math.max(0, viewportTop + viewportHeight - 8 - rect.bottom - 12);
+      const above = Math.max(0, rect.top - 12 - viewportTop - 8);
+      const placeBelow = below >= Math.min(560, Math.max(above, 180));
+      const availableHeight = placeBelow ? below : above;
+      state.panel.style.maxHeight = `${Math.min(560, availableHeight)}px`;
+      state.panel.style.width = `${Math.min(380, viewportWidth - 16)}px`;
       const width  = state.panel.offsetWidth  || 380;
       const height = state.panel.offsetHeight || 240;
-      const viewportWidth = document.documentElement.clientWidth;
-      const viewportHeight = document.documentElement.clientHeight;
-
-      // Prefer placing the panel OUTSIDE the editable target element bounds
-      // so it doesn't cover the text being corrected.
-      const targetRect = state.selection?.target?.getBoundingClientRect?.();
-      const anchorBottom = targetRect ? Math.max(rect.bottom, targetRect.bottom) : rect.bottom;
-      const anchorTop    = targetRect ? Math.min(rect.top,    targetRect.top)    : rect.top;
 
       let left = window.scrollX + rect.left + (rect.width / 2) - (width / 2);
-      let top  = window.scrollY + anchorBottom + 16;
+      let top = window.scrollY + (placeBelow ? rect.bottom + 12 : rect.top - height - 12);
 
-      const viewportBottom = window.scrollY + viewportHeight - 8;
-      if (top + height > viewportBottom) {
-        top = window.scrollY + anchorTop - height - 16;
-      }
-
-      const minLeft = window.scrollX + 8;
-      const maxLeft = window.scrollX + viewportWidth - width - 8;
+      const minLeft = window.scrollX + viewportLeft + 8;
+      const maxLeft = minLeft + viewportWidth - width - 16;
       left = Math.max(minLeft, Math.min(left, maxLeft));
 
-      const minTop = window.scrollY + 8;
-      const maxTop = window.scrollY + viewportHeight - height - 8;
+      const minTop = window.scrollY + viewportTop + 8;
+      const maxTop = window.scrollY + viewportTop + viewportHeight - height - 8;
       top = maxTop < minTop
         ? minTop
         : Math.max(minTop, Math.min(top, maxTop));
@@ -843,6 +927,7 @@
   function setStatus(message, kind) {
     state.panelStatus.textContent = message || "";
     state.panelStatus.dataset.kind = kind || "";
+    state.panelResults.setAttribute("aria-busy", String(kind === "loading"));
   }
 
   /* ── Corrector ──────────────────────────────────────────────────────── */
@@ -1098,6 +1183,7 @@
         state.selection = fresh;
         state.workingText = fresh.text;
       }
+      onInputChange({ target: current.target });
       return;
     }
 
@@ -1157,7 +1243,7 @@
 
     state.selection = synonymSelection;
 
-    openPanel(`Sinònims de «${synonymSelection.text}»`, synonymSelection.rect);
+    openPanel("Sinònims", synonymSelection.rect);
     setStatus("Cercant…", "loading");
 
     const response = await H.sendMessage({
@@ -1186,14 +1272,77 @@
     const list = document.createElement("div");
     list.className = "insp-synonyms";
 
-    for (const word of words) {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "insp-chip";
-      chip.textContent = word;
-      chip.addEventListener("click", () => replaceSelectionWithWord(word));
-      list.appendChild(chip);
+    for (const entry of data?.results || []) {
+      const groups = (entry.synonymEntries || []).filter((group) => group.synonimWords?.some((word) => word.wordString));
+      if (!groups.length) continue;
+      const lemma = document.createElement("section");
+      lemma.className = "insp-synonym-entry";
+      const title = document.createElement("h3");
+      title.className = "insp-dictionary-title";
+      title.textContent = entry.lemma || state.selection.text.trim();
+      if (entry.feminineLemma) {
+        const feminine = document.createElement("span");
+        feminine.className = "insp-synonym-feminine";
+        feminine.textContent = ` ${entry.feminineLemma}`;
+        title.appendChild(feminine);
+      }
+      lemma.appendChild(title);
+      groups.forEach((group, index) => {
+      const section = document.createElement("section");
+      section.className = "insp-synonym-group";
+      const heading = document.createElement("h4");
+      const categories = {
+        n: "nom", m: "nom masculí", f: "nom femení", nm: "nom masculí", nf: "nom femení",
+        adj: "adjectiu", adv: "adverbi", v: "verb", vt: "verb transitiu", vi: "verb intransitiu",
+        pron: "pronom", prep: "preposició", conj: "conjunció", interj: "interjecció",
+        ij: "interjecció", indef: "indefinit", loc: "locució",
+        "adj/n": "adjectiu o nom", "adj/adv": "adjectiu o adverbi",
+        art: "article", det: "determinant", "loc adj": "locució adjectival",
+        "loc adv": "locució adverbial", "loc v": "locució verbal"
+      };
+      const category = String(group.grammarCategory || "").trim();
+      const normalizedCategory = category.toLowerCase().replace(/\./g, "");
+      const description = [categories[normalizedCategory] || category, group.comment].filter(Boolean).join(" · ");
+      heading.textContent = `${index + 1}. ${description || "Sinònims"}`;
+      const chips = document.createElement("div");
+      chips.className = "insp-synonym-words";
+      const seen = new Set();
+      for (const word of group.synonimWords || []) {
+        if (!word.wordString || seen.has(word.wordString)) continue;
+        seen.add(word.wordString);
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "insp-chip";
+        chip.textContent = word.wordString;
+        if (word.wordComment) {
+          const qualifier = document.createElement("small");
+          qualifier.className = "insp-synonym-qualifier";
+          qualifier.textContent = ` (${word.wordComment})`;
+          chip.appendChild(qualifier);
+        }
+        if (!state.selection?.target) chip.disabled = true;
+        chip.addEventListener("click", () => replaceSelectionWithWord(word.wordString));
+        if (seen.size > 1) chips.appendChild(document.createTextNode(", "));
+        chips.appendChild(chip);
+        if (word.feminineForm && word.feminineForm !== word.wordString) {
+          const feminine = document.createElement("button");
+          feminine.type = "button";
+          feminine.className = "insp-chip insp-synonym-feminine";
+          feminine.textContent = word.feminineForm;
+          feminine.disabled = !state.selection?.target;
+          feminine.addEventListener("click", () => replaceSelectionWithWord(word.feminineForm));
+          chips.append(document.createTextNode(" "), feminine);
+        }
+      }
+      section.append(heading, chips);
+      lemma.appendChild(section);
+      });
+      list.appendChild(lemma);
     }
+    const source = document.createElement("p");
+    source.className = "insp-dictionary-meta";
+    source.textContent = "Font: diccionari de sinònims de Softcatalà, allotjat al nostre servidor.";
+    list.appendChild(source);
 
     state.panelResults.replaceChildren(list);
   }
@@ -1471,7 +1620,7 @@
 
     state.selection = dictionarySelection;
 
-    openPanel(`Diccionari · ${dictionarySelection.text.trim()}`, dictionarySelection.rect);
+    openPanel("Diccionari", dictionarySelection.rect);
     setStatus("Comprovant el diccionari…", "loading");
 
     const response = await H.sendMessage({
@@ -1498,11 +1647,39 @@
 
     const meta = document.createElement("p");
     meta.className = "insp-dictionary-meta";
-    meta.textContent = `Font: ${entry.repoName || "Viccionari en català"}`;
+    const wiktionary = document.createElement("a");
+    wiktionary.href = "https://ca.wiktionary.org/";
+    wiktionary.textContent = "Viccionari";
+    const softcatala = document.createElement("a");
+    softcatala.href = "https://www.softcatala.org/";
+    softcatala.textContent = "Softcatalà";
+    const license = document.createElement("a");
+    license.href = "https://creativecommons.org/licenses/by-sa/4.0/deed.ca";
+    license.textContent = "CC BY-SA 4.0";
+    for (const link of [wiktionary, softcatala, license]) {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }
+    meta.append("Definicions del ", wiktionary,
+      ", el diccionari col·laboratiu en català, recollides per ", softcatala, ".");
+    const licenseNote = document.createElement("p");
+    licenseNote.className = "insp-dictionary-license";
+    licenseNote.append("Llicència dels textos: ", license, ".");
 
-    const summary = document.createElement("p");
+    const summary = document.createElement("ol");
     summary.className = "insp-dictionary-summary";
-    summary.textContent = entry.summary;
+    const definitions = Array.isArray(entry.definitions) ? entry.definitions : String(entry.summary || "").split(/\n+/).filter(Boolean);
+    definitions.forEach((definition, index) => {
+      const item = document.createElement("li");
+      const number = document.createElement("span");
+      number.className = "insp-definition-number";
+      number.textContent = `${index + 1}.`;
+      number.setAttribute("aria-hidden", "true");
+      const text = document.createElement("span");
+      text.textContent = definition;
+      item.append(number, text);
+      summary.appendChild(item);
+    });
 
     const repoLink = document.createElement("a");
     repoLink.href = entry.repoUrl || `https://ca.wiktionary.org/wiki/${encodeURIComponent(entry.word || dictionarySelection.text.trim())}`;
@@ -1511,9 +1688,9 @@
     repoLink.className = "insp-link";
     repoLink.textContent = "Obrir l'entrada al Viccionari";
 
-    wrap.append(title, meta, summary, repoLink);
+    wrap.append(title, summary, repoLink, meta, licenseNote);
     state.panelResults.replaceChildren(wrap);
-    setStatus("Definicions trobades.", "ok");
+    setStatus("", "ok");
   }
 
   function openSettingsPage() {
@@ -1611,8 +1788,8 @@
       return ["text", "search", "email", "url"].includes(type) ? element : null;
     }
 
-    const editable = element.closest?.("[contenteditable]");
-    if (editable && String(editable.getAttribute("contenteditable")).toLowerCase() !== "false") {
+    const editable = element.closest?.('[contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]');
+    if (editable && element.isContentEditable) {
       return editable;
     }
     if (element instanceof HTMLElement && element.isContentEditable) return element;

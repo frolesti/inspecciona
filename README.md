@@ -2,13 +2,17 @@
 
 Extensió de Google Chrome centrada en català, integrada amb serveis propis executats amb Docker a la VM.
 
-## Versió 2.0
+## Versió 2.1
 
 - Detecció ortogràfica i gramatical mentre s'escriu, amb revisió després d'una pausa de 480 ms.
-- Correccions directament sobre les incidències marcades, sense haver de seleccionar el text.
+- Correccions directament sobre les incidències marcades, amb obertura només per clic i selector quan hi ha diverses alternatives.
+- Revisió automàtica del text després d'aplicar una correcció, per recuperar les incidències restants.
 - Clicar el text o moure el cursor no torna a carregar la detecció.
-- Cerca de sinònims d'una paraula.
-- Consulta de definicions del diccionari català allotjat a la mateixa VM.
+- Sinònims agrupats per entrada i accepció, amb categories gramaticals, formes femenines i locucions.
+- Definicions numerades amb enllaços al Viccionari, Softcatalà i la llicència dels textos.
+- Consulta del lema per a plurals, femenins i participis regulars reconeguts pel servei de sinònims quan no hi ha una definició directa. No cobreix totes les formes irregulars.
+- Panells amb estil unificat, indicador de càrrega i alçada ajustada a l'espai disponible al voltant de la selecció.
+- Enllaços externs en una pestanya nova i informes d'error amb l'aplicació de correu predeterminada.
 - Autocomplete de paraules del diccionari de sinònims (funcionalitat addicional de Softcatalà).
 
 ## Backend
@@ -76,9 +80,10 @@ Aquest script actualitza `manifest.json`, crea commit, tag i fa push.
 ## Ús
 
 1. Fes focus en un `textarea`, `input` de text o zona `contenteditable`.
-2. Prem el botó `Inspecciona` que apareix sobre el camp.
-3. Revisa i aplica correccions.
-4. Cerca sinònims o suggereix paraules per prefix.
+2. Escriu i espera una pausa perquè es revisi el text.
+3. En editors amb marques, clica una paraula subratllada per obrir la correcció. En inputs i textareas, clica dins del fragment amb error.
+4. Tria una alternativa si n'hi ha diverses i aplica-la, o ignora la incidència.
+5. Selecciona una paraula per consultar-ne els sinònims o el diccionari des de la barra flotant.
 
 ## Backend local
 

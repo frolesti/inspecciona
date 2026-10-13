@@ -73,6 +73,24 @@ L'script fa tot sol:
 
 | Versió | Data       | Descripció                                           |
 |--------|------------|------------------------------------------------------|
+| 2.1.0  | 2026-10-13 | Correccions només per clic i alternatives; panells unificats; sinònims per accepcions; consulta de flexions al diccionari |
 | 2.0.0  | 2026-10-07 | Detecció mentre s'escriu en lloc de seleccionar text per corregir; diccionari català a la VM |
 | 0.1.0  | 2026-06-17 | MVP: corrector, sinònims, autocomplete               |
 | 0.2.0  | 2026-06-17 | Refactor: zero CSS extern, Bootstrap als HTML, scripts de build |
+
+## Novetats de la versió 2.1.0
+
+- Les correccions s'obren només amb un clic explícit, no en passar el cursor ni quan arriba la resposta del corrector.
+- Selector de propostes quan una incidència té diverses correccions possibles.
+- Revisió automàtica després d'aplicar una correcció i millor interacció entre errors propers.
+- Revisió inicial de camps amb text i compatibilitat amb inputs, textareas i editors `contenteditable="plaintext-only"`.
+- Estil compartit entre correccions, sinònims i diccionari, sense franja lateral al popup de correcció.
+- Indicador de càrrega accessible, amb respecte pel moviment reduït.
+- Panells que recalculen la posició i limiten l'alçada quan arriben resultats llargs, amb desplaçament intern.
+- Sinònims agrupats per lema i accepció, amb categories gramaticals llegibles, formes femenines, comentaris i locucions.
+- Definicions numerades, atribució breu i enllaços al Viccionari, Softcatalà i la llicència CC BY-SA 4.0.
+- Cerca alternativa de lemes per a plurals, femenins i participis regulars validats pel servei de sinònims. Les definicions directes tenen prioritat; no cobreix totes les formes irregulars.
+- Enllaços externs amb navegació explícita en una pestanya nova, inclosa la fitxa d'Inspecciona a la Chrome Web Store.
+- Informes d'error amb el gestor de correu predeterminat, sense imposar Gmail.
+
+Validació: tests d'utilitats i consulta de flexions; proves de navegador de les interaccions, la substitució i el posicionament. No s'ha fet una validació completa en sessions autenticades de totes les webs.
