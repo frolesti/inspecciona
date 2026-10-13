@@ -1,7 +1,7 @@
 ﻿{
     "manifest_version":  3,
     "name":  "Inspecciona",
-    "version":  "2.0.0",
+    "version":  "2.1.0",
     "description":  "Corrector ortogràfic, gramatical i tipogràfic per al català amb serveis locals (Docker).",
     "permissions":  [
                         "storage"
@@ -35,12 +35,16 @@
                   "48":  "assets/icon-48.png",
                   "128":  "assets/icon-128.png"
               },
-    "web_accessible_resources": [
-        {
-            "resources": ["assets/icon-32.png"],
-            "matches": ["<all_urls>"]
-        }
-    ],
+    "web_accessible_resources":  [
+                                     {
+                                         "resources":  [
+                                                           "assets/icon-32.png"
+                                                       ],
+                                         "matches":  [
+                                                         "\u003call_urls\u003e"
+                                                     ]
+                                     }
+                                 ],
     "content_scripts":  [
                             {
                                 "matches":  [
