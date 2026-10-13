@@ -1,3 +1,28 @@
 {
-  "repos": {}
+  "repos": {
+    "Softcatala/catalan-dict-tools": {
+      "kind": "release",
+      "versionId": "216254600",
+      "name": "Maig 2025",
+      "ref": "v3.0.9",
+      "htmlUrl": "https://github.com/Softcatala/catalan-dict-tools/releases/tag/v3.0.9",
+      "publishedAt": "2025-05-02T21:22:45Z"
+    },
+    "Softcatala/diccionari-multilingue": {
+      "kind": "commit",
+      "versionId": "57d4454099b77233bb2bd53d5aae12fbb11dbee5",
+      "name": "Fix test",
+      "ref": "master",
+      "htmlUrl": "https://github.com/Softcatala/diccionari-multilingue/commit/57d4454099b77233bb2bd53d5aae12fbb11dbee5",
+      "publishedAt": "2017-10-29T20:08:32Z"
+    },
+    "Softcatala/diccionari-angles-catala": {
+      "kind": "commit",
+      "versionId": "2e3ea9f7f8239406d5cea8e6e5b8096e484ab8b9",
+      "name": "Actualització de dades",
+      "ref": "main",
+      "htmlUrl": "https://github.com/Softcatala/diccionari-angles-catala/commit/2e3ea9f7f8239406d5cea8e6e5b8096e484ab8b9",
+      "publishedAt": "2026-07-18T09:01:16Z"
+    }
+  }
 }
